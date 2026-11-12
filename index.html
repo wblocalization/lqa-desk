@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LQA Desk — техническая проверка переводов</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%23ed3cca%22/%3E%3Cstop offset=%22.55%22 stop-color=%22%23a020d8%22/%3E%3Cstop offset=%221%22 stop-color=%22%235b1bb8%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%2264%22 height=%2264%22 rx=%2216%22 fill=%22url%28%23g%29%22/%3E%3Cpath d=%22M14 20a6 6 0 0 1 6-6h24a6 6 0 0 1 6 6v16a6 6 0 0 1-6 6H31l-9 8v-8h-2a6 6 0 0 1-6-6z%22 fill=%22%23fff%22/%3E%3Cpath d=%22M23 28.500l6 6 12-13%22 fill=%22none%22 stroke=%22%23a020d8%22 stroke-width=%225%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E">
+<meta name="theme-color" content="#a020d8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600&family=Noto+Sans:wght@400;500;600&family=Noto+Sans+Georgian:wght@400;600&family=Noto+Sans+Armenian:wght@400;600&family=Noto+Sans+Ethiopic:wght@400;600&family=Noto+Sans+Hebrew:wght@400;600&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
@@ -264,8 +266,12 @@ html.locked #gate{display:flex;min-height:100vh;align-items:center;justify-conte
       <div class="filters">
         <span class="hint" id="shown"></span>
         <span class="spacer"></span>
-        <button class="btn" id="btnXlsx">Экспорт в Excel</button>
-        <button class="btn" id="btnCsv">Экспорт в CSV</button>
+        <span class="hint">Проблемные строки:</span>
+        <button class="btn primary" id="btnRowsXlsx" title="Только строки с находками: одна строка на запись, все её проблемы — в одной ячейке">Скачать Excel</button>
+        <button class="btn" id="btnRowsCsv" title="Только строки с находками: одна строка на запись, все её проблемы — в одной ячейке">CSV</button>
+        <span class="hint" style="margin-left:8px">Все находки:</span>
+        <button class="btn" id="btnXlsx" title="Подробный отчёт: одна строка на каждую находку">Excel</button>
+        <button class="btn" id="btnCsv" title="Подробный отчёт: одна строка на каждую находку">CSV</button>
         <button class="btn" id="btnPoAll" hidden>Скачать .po с пометками</button>
       </div>
       <div class="tablewrap">
@@ -1451,7 +1457,7 @@ function renderTable() {
       <td><span class="sev ${f.severity}">${SEVERITY[f.severity]}</span></td>
       <td class="small">${esc(f.message)}</td></tr>`;
   }).join('') : '<tr><td colspan="8" class="empty">' + (state.result.findings.some(f => f.severity !== 'info') ? 'Под выбранные фильтры ничего не попадает.' : 'Находок нет — автопроверки пройдены.') + '</td></tr>';
-  $('shown').textContent = 'Показано находок: ' + list.length + (list.length > fl.size ? ' (стр. ' + (fl.page + 1) + ' из ' + pages + ')' : '') + '. Экспорт учитывает фильтры.';
+  $('shown').textContent = 'Показано находок: ' + list.length + (list.length > fl.size ? ' (стр. ' + (fl.page + 1) + ' из ' + pages + ')' : '') + '. Выгрузка учитывает фильтры.';
   $('pgInfo').textContent = 'Стр. ' + (fl.page + 1) + ' из ' + pages;
   $('pgPrev').disabled = fl.page === 0; $('pgNext').disabled = fl.page >= pages - 1;
 }
@@ -1472,18 +1478,34 @@ function exportRows() {
   const head = ['Ключ', 'Файл', 'Платформа', 'Язык', 'Исходник', 'Перевод', 'Тип проблемы', 'Подтип', 'Важность', 'Пояснение'];
   return [head].concat(filtered().map(f => [f.row.key, f.row.file, f.row.platform, f.row.L.name, f.row.src, f.row.tgt, checkName(f.check), f.type, SEVERITY[f.severity], f.message]));
 }
+/* Только проблемные строки: одна строка на запись, все её находки собраны в одну ячейку. Учитывает фильтры. */
+function exportProblemRows() {
+  const by = new Map();
+  for (const f of filtered()) { if (f.severity === 'info') continue; if (!by.has(f.row)) by.set(f.row, []); by.get(f.row).push(f); }
+  const head = ['Ключ', 'Файл', 'Платформа', 'Язык', 'Исходник', 'Перевод', 'Важность', 'Кол-во проблем', 'Проблемы'];
+  return [head].concat([...by.entries()].map(([r, fs]) => {
+    const worst = fs.reduce((a, f) => SEV_ORDER[f.severity] < SEV_ORDER[a] ? f.severity : a, 'minor');
+    return [r.key, r.file, r.platform, r.L.name, r.src, r.tgt, SEVERITY[worst], fs.length, fs.map(f => '[' + SEVERITY[f.severity] + '] ' + f.type + ': ' + f.message).join('\n')];
+  }));
+}
 const stamp = () => new Date().toISOString().slice(0, 10);
-$('btnCsv').onclick = () => {
+function saveCsv(name, rows) {
+  if (rows.length < 2) return alert('Нет строк для выгрузки.');
   const q = v => /[";\n\r]/.test(v) ? '"' + String(v).replace(/"/g, '""') + '"' : v;
-  download('lqa-desk-' + stamp() + '.csv', '﻿' + exportRows().map(r => r.map(q).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
-};
-$('btnXlsx').onclick = () => {
-  if (!window.XLSX) return alert('Библиотека SheetJS не загрузилась — воспользуйтесь экспортом в CSV.');
-  const ws = XLSX.utils.aoa_to_sheet(exportRows());
-  ws['!cols'] = [18, 20, 10, 14, 50, 50, 24, 26, 14, 60].map(w => ({ wch: w }));
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Находки');
-  XLSX.writeFile(wb, 'lqa-desk-' + stamp() + '.xlsx');
-};
+  download(name + '-' + stamp() + '.csv', '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+}
+function saveXlsx(name, sheet, rows, widths) {
+  if (rows.length < 2) return alert('Нет строк для выгрузки.');
+  if (!window.XLSX) return alert('Библиотека SheetJS не загрузилась — воспользуйтесь выгрузкой в CSV.');
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = widths.map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, sheet);
+  XLSX.writeFile(wb, name + '-' + stamp() + '.xlsx');
+}
+$('btnCsv').onclick = () => saveCsv('lqa-desk-nahodki', exportRows());
+$('btnXlsx').onclick = () => saveXlsx('lqa-desk-nahodki', 'Находки', exportRows(), [18, 20, 10, 14, 50, 50, 24, 26, 14, 60]);
+$('btnRowsCsv').onclick = () => saveCsv('lqa-desk-problemnye-stroki', exportProblemRows());
+$('btnRowsXlsx').onclick = () => saveXlsx('lqa-desk-problemnye-stroki', 'Проблемные строки', exportProblemRows(), [18, 20, 10, 14, 50, 50, 14, 10, 80]);
 
 /* ---------- настройки ---------- */
 $('btnSettings').onclick = () => { renderSettings(state.settings); $('dlgSettings').showModal(); };
