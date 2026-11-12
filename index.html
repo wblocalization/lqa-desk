@@ -1122,7 +1122,7 @@ function annotatePO(ds, findings) {
 /* =====================================================================
    8. СОСТОЯНИЕ И ИНТЕРФЕЙС
    ===================================================================== */
-const DEFAULT_SETTINGS = () => ({ checks: Object.fromEntries(CHECKS.map(c => [c.id, true])), ranges: {}, minLen: 10 });
+const DEFAULT_SETTINGS = () => ({ checks: Object.fromEntries(CHECKS.map(c => [c.id, true])), ranges: {}, minLen: 10, platforms: [] });
 const state = {
   datasets: [],            // { id, name, kind: 'paste'|'sheet'|'po', platform, lang, rows: [{key, src, tgt, entry?}], po? }
   glossary: null,          // { name, terms: [{ru, tr: {code: [варианты]}, forms: [], dnt}], langs: [] }
@@ -1131,13 +1131,24 @@ const state = {
   filter: { type: '', sev: '', platform: '', lang: '', q: '', info: false, page: 0, size: 100 },
   seq: 0, runId: 0,
 };
-try { const s = JSON.parse(localStorage.getItem('lqaDesk.settings') || 'null'); if (s) { Object.assign(state.settings.checks, s.checks || {}); state.settings.ranges = s.ranges || {}; if (s.minLen >= 0) state.settings.minLen = s.minLen; } } catch (e) {}
+try { const s = JSON.parse(localStorage.getItem('lqaDesk.settings') || 'null'); if (s) { Object.assign(state.settings.checks, s.checks || {}); state.settings.ranges = s.ranges || {}; if (s.minLen >= 0) state.settings.minLen = s.minLen; if (Array.isArray(s.platforms)) state.settings.platforms = s.platforms.map(String); } } catch (e) {}
 const saveSettings = () => { try { localStorage.setItem('lqaDesk.settings', JSON.stringify(state.settings)); } catch (e) {} };
 const rangeFor = L => state.settings.ranges[L.code] || L.lengthRatio;
 const checkName = id => (CHECKS.find(c => c.id === id) || {}).name || id;
 
 const langOptions = sel => '<option value="">— язык —</option>' + targetLangs().map(l => `<option value="${l.code}"${l.code === sel ? ' selected' : ''}>${esc(l.name)}${l.basic ? '' : ' (' + l.code + ')'}</option>`).join('');
-const platformOptions = sel => '<option value="">— платформа —</option>' + PLATFORMS.map(p => `<option${p === sel ? ' selected' : ''}>${p}</option>`).join('');
+/* Платформы: стандартные + свои (хранятся в настройках). Пункт «＋ Своя…» есть в каждом списке. */
+const NEW_PLATFORM = '__new__';
+const allPlatforms = extra => [...new Set([...PLATFORMS, ...state.settings.platforms, ...state.datasets.map(d => d.platform), extra].filter(Boolean))];
+const platformOptions = sel => '<option value="">— платформа —</option>' + allPlatforms(sel).map(p => `<option value="${esc(p)}"${p === sel ? ' selected' : ''}>${esc(p)}</option>`).join('') + `<option value="${NEW_PLATFORM}">＋ Своя платформа…</option>`;
+document.addEventListener('change', e => {                       // фаза перехвата: срабатывает раньше остальных обработчиков
+  const sel = e.target; if (sel.tagName !== 'SELECT' || sel.value !== NEW_PLATFORM) return;
+  const prev = ([...sel.options].find(o => o.defaultSelected) || {}).value || '';
+  const name = (prompt('Название платформы (например, Desktop, Seller, Huawei):') || '').trim().slice(0, 40);
+  if (name && !allPlatforms().includes(name)) { state.settings.platforms.push(name); saveSettings(); }
+  sel.innerHTML = platformOptions(name || prev);
+  if (sel.id !== 'pastePlatform') $('pastePlatform').innerHTML = platformOptions($('pastePlatform').value);
+}, true);
 
 function addDataset(d) {
   d.id = ++state.seq;
@@ -1486,13 +1497,14 @@ $('btnRowsXlsx').onclick = () => saveXlsx('lqa-desk-problemnye-stroki', 'Про�
 $('btnSettings').onclick = () => { renderSettings(state.settings); $('dlgSettings').showModal(); };
 function renderSettings(s) {
   $('setBody').innerHTML = `<label class="f" style="max-width:420px">Не проверять длину, если исходник короче (символов)<input type="number" id="setMinLen" min="0" value="${s.minLen}"></label>
+    <label class="f" style="max-width:420px;margin-top:12px">Свои платформы (через запятую; Web, Android и iOS есть всегда)<input type="text" id="setPlatforms" value="${esc((s.platforms || []).join(', '))}" placeholder="Desktop, Seller"></label>
     <div style="margin:14px 0 6px;font-weight:500">Допустимое отношение длины перевода к исходнику</div>
     <table class="simple" style="max-width:560px"><thead><tr><th>Язык</th><th>Письменность</th><th>Мин.</th><th>Макс.</th></tr></thead><tbody>` +
     targetLangs().map(L => { const r = s.ranges[L.code] || L.lengthRatio; return `<tr><td>${esc(L.name)}</td><td class="hint">${esc(L.script)}</td><td><input type="number" step="0.05" min="0" style="width:80px" data-r="${L.code}" data-i="0" value="${r[0]}"></td><td><input type="number" step="0.05" min="0" style="width:80px" data-r="${L.code}" data-i="1" value="${r[1]}"></td></tr>`; }).join('') +
     '</tbody></table><div class="hint" style="margin-top:8px">Настройки хранятся только в этом браузере. Загруженные строки и глоссарий нигде не сохраняются.</div>';
 }
 $('setCancel').onclick = () => $('dlgSettings').close();
-$('setReset').onclick = () => renderSettings({ minLen: 10, ranges: {} });
+$('setReset').onclick = () => renderSettings({ minLen: 10, ranges: {}, platforms: [] });
 $('setOk').onclick = () => {
   const ranges = {};
   for (const L of targetLangs()) {
@@ -1501,7 +1513,8 @@ $('setOk').onclick = () => {
     if (lo !== L.lengthRatio[0] || hi !== L.lengthRatio[1]) ranges[L.code] = [lo, hi];
   }
   state.settings.ranges = ranges; state.settings.minLen = Math.max(0, parseInt($('setMinLen').value, 10) || 0);
-  saveSettings(); $('dlgSettings').close(); scheduleRun();
+  state.settings.platforms = [...new Set($('setPlatforms').value.split(',').map(x => x.trim().slice(0, 40)).filter(x => x && !PLATFORMS.includes(x)))];
+  saveSettings(); $('dlgSettings').close(); $('pastePlatform').innerHTML = platformOptions($('pastePlatform').value); renderDatasets(); scheduleRun();
 };
 
 /* ---------- очистка и пример ---------- */
