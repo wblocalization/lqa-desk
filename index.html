@@ -183,7 +183,6 @@ dialog .df{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:8
       <textarea id="pasteArea" placeholder="Вставьте таблицу из буфера: ключ ⇥ исходник ⇥ перевод (через табуляцию, по строке на запись). Если колонок две — это исходник и перевод."></textarea>
       <div class="row mt">
         <label class="f">Язык перевода<select id="pasteLang"></select></label>
-        <label class="f">Платформа<select id="pastePlatform"></select></label>
         <button class="btn primary" id="btnPaste" style="align-self:flex-end">Добавить строки</button>
       </div>
     </div>
@@ -191,7 +190,7 @@ dialog .df{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:8
     <div class="pane" id="pane-sheet">
       <div class="row">
         <input type="file" id="fileSheet" accept=".xlsx,.xls,.ods,.csv,.tsv,.txt" multiple>
-        <span class="hint">После загрузки нужно выбрать колонки: ключ, исходник, перевод. Язык и платформа определяются по имени файла — их можно поправить.</span>
+        <span class="hint">После загрузки нужно выбрать колонки: ключ, исходник, перевод. Язык определяется по имени файла — его можно поправить.</span>
       </div>
     </div>
 
@@ -232,7 +231,7 @@ dialog .df{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:8
       <div class="filters">
         <select id="fType" title="Тип проблемы"></select>
         <select id="fSev" title="Важность"></select>
-        <select id="fPlatform" title="Платформа"></select>
+        <select id="fFile" title="Файл"></select>
         <select id="fLang" title="Язык"></select>
         <input type="search" id="fSearch" placeholder="Поиск по ключу, тексту, пояснению…">
         <label class="chk" title="Показывать строки, где термин глоссария найден, и в какой форме"><input type="checkbox" id="fInfo">Совпадения с глоссарием</label>
@@ -252,7 +251,7 @@ dialog .df{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:8
       <div class="tablewrap">
         <table class="res">
           <colgroup><col style="width:11%"><col style="width:9%"><col style="width:7%"><col style="width:20%"><col style="width:20%"><col style="width:11%"><col style="width:8%"><col style="width:14%"></colgroup>
-          <thead><tr><th>Ключ</th><th>Файл / платформа</th><th>Язык</th><th>Исходник</th><th>Перевод</th><th>Тип проблемы</th><th>Важность</th><th>Пояснение</th></tr></thead>
+          <thead><tr><th>Ключ</th><th>Файл</th><th>Язык</th><th>Исходник</th><th>Перевод</th><th>Тип проблемы</th><th>Важность</th><th>Пояснение</th></tr></thead>
           <tbody id="resBody"></tbody>
         </table>
       </div>
@@ -452,7 +451,6 @@ const BASE_LANG = { code: 'xx', name: 'Другой язык (базовый р�
   aliases: [], punct: P(), suffixes: [], prefixes: [], basic: true, spaces: true, lengthRatio: [0.7, 1.6] };
 
 const SOURCE_LANG = 'ru';
-const PLATFORMS = ['Web', 'Android', 'iOS'];
 
 /* =====================================================================
    2. УТИЛИТЫ
@@ -830,7 +828,7 @@ const CHECKS = [
     } },
 
   /* ---------- Консистентность ---------- */
-  { id: 'consistency', name: 'Консистентность', hint: 'Один и тот же исходник переведён по-разному (в т.ч. Android / iOS / Web)', scope: 'all',
+  { id: 'consistency', name: 'Консистентность', hint: 'Один и тот же исходник переведён по-разному (в т.ч. в разных файлах: Android / iOS / Web)', scope: 'all',
     run(rows) {
       const groups = new Map(), out = [];
       for (const r of rows) {
@@ -842,12 +840,12 @@ const CHECKS = [
       for (const g of groups.values()) {
         if (g.size < 2) continue;
         const variants = [...g.entries()];
-        const plats = new Set(); for (const [, rs] of variants) for (const r of rs) plats.add(r.platform || '—');
+        const files = new Set(); for (const [, rs] of variants) for (const r of rs) files.add(r.file);
         for (const [t, rs] of variants) {
           const others = variants.filter(v => v[0] !== t);
-          const desc = others.slice(0, 3).map(([ot, ors]) => '«' + cut(ot, 70) + '» (' + [ors[0].platform, ors[0].key].filter(Boolean).join(', ') + (ors.length > 1 ? ' и ещё ' + (ors.length - 1) : '') + ')').join('; ');
-          const msg = 'Тот же исходник переведён иначе: ' + desc + (others.length > 3 ? ' и ещё ' + (others.length - 3) + ' вар.' : '') + (plats.size > 1 ? '. Расхождение между платформами: ' + [...plats].join(' / ') + '.' : '');
-          for (const r of rs) out.push(F(r, plats.size > 1 ? 'Разный перевод на платформах' : 'Разный перевод одного исходника', 'major', msg));
+          const desc = others.slice(0, 3).map(([ot, ors]) => '«' + cut(ot, 70) + '» (' + [ors[0].file, ors[0].key].filter(Boolean).join(', ') + (ors.length > 1 ? ' и ещё ' + (ors.length - 1) : '') + ')').join('; ');
+          const msg = 'Тот же исходник переведён иначе: ' + desc + (others.length > 3 ? ' и ещё ' + (others.length - 3) + ' вар.' : '') + (files.size > 1 ? '. Расхождение между файлами: ' + [...files].slice(0, 4).join(' / ') + '.' : '');
+          for (const r of rs) out.push(F(r, files.size > 1 ? 'Разный перевод в разных файлах' : 'Разный перевод одного исходника', 'major', msg));
         }
       }
       return out;
@@ -1033,20 +1031,12 @@ async function readTableFile(file) {
   return wb.SheetNames.map(n => ({ name: n, rows: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: false, blankrows: false }).map(r => r.map(c => String(c ?? ''))) }));
 }
 
-/* Язык и платформа по имени файла / заголовку. */
+/* Язык по имени файла / заголовку. */
 function detectLang(name) {
   const tokens = String(name).toLowerCase().replace(/\.[a-z0-9]+$/, '').split(/[^a-zа-яё]+/).filter(Boolean).reverse();
   for (const t of tokens) for (const L of Object.values(LANGUAGES)) if (L.aliases.includes(t) || (t.length >= 5 && L.name.toLowerCase().startsWith(t.slice(0, 5)))) return L.code;
   return '';
 }
-function detectPlatform(name) {
-  const n = String(name).toLowerCase();
-  if (/android|andr|google/.test(n)) return 'Android';
-  if (/ios|iphone|ipad|apple/.test(n)) return 'iOS';
-  if (/web|site|front|desktop/.test(n)) return 'Web';
-  return '';
-}
-
 /* ---------- .po ---------- */
 function poUnquote(s) {
   return s.slice(1, -1).replace(/\\(.)/g, (m, c) => c === 'n' ? '\n' : c === 't' ? '\t' : c === 'r' ? '\r' : c);
@@ -1122,33 +1112,21 @@ function annotatePO(ds, findings) {
 /* =====================================================================
    8. СОСТОЯНИЕ И ИНТЕРФЕЙС
    ===================================================================== */
-const DEFAULT_SETTINGS = () => ({ checks: Object.fromEntries(CHECKS.map(c => [c.id, true])), ranges: {}, minLen: 10, platforms: [] });
+const DEFAULT_SETTINGS = () => ({ checks: Object.fromEntries(CHECKS.map(c => [c.id, true])), ranges: {}, minLen: 10 });
 const state = {
-  datasets: [],            // { id, name, kind: 'paste'|'sheet'|'po', platform, lang, rows: [{key, src, tgt, entry?}], po? }
+  datasets: [],            // { id, name, kind: 'paste'|'sheet'|'po', lang, rows: [{key, src, tgt, entry?}], po? }
   glossary: null,          // { name, terms: [{ru, tr: {code: [варианты]}, forms: [], dnt}], langs: [] }
   settings: DEFAULT_SETTINGS(),
   result: null,            // { rows, findings, cleanRows }
-  filter: { type: '', sev: '', platform: '', lang: '', q: '', info: false, page: 0, size: 100 },
+  filter: { type: '', sev: '', file: '', lang: '', q: '', info: false, page: 0, size: 100 },
   seq: 0, runId: 0,
 };
-try { const s = JSON.parse(localStorage.getItem('lqaDesk.settings') || 'null'); if (s) { Object.assign(state.settings.checks, s.checks || {}); state.settings.ranges = s.ranges || {}; if (s.minLen >= 0) state.settings.minLen = s.minLen; if (Array.isArray(s.platforms)) state.settings.platforms = s.platforms.map(String); } } catch (e) {}
+try { const s = JSON.parse(localStorage.getItem('lqaDesk.settings') || 'null'); if (s) { Object.assign(state.settings.checks, s.checks || {}); state.settings.ranges = s.ranges || {}; if (s.minLen >= 0) state.settings.minLen = s.minLen; } } catch (e) {}
 const saveSettings = () => { try { localStorage.setItem('lqaDesk.settings', JSON.stringify(state.settings)); } catch (e) {} };
 const rangeFor = L => state.settings.ranges[L.code] || L.lengthRatio;
 const checkName = id => (CHECKS.find(c => c.id === id) || {}).name || id;
 
 const langOptions = sel => '<option value="">— язык —</option>' + targetLangs().map(l => `<option value="${l.code}"${l.code === sel ? ' selected' : ''}>${esc(l.name)}${l.basic ? '' : ' (' + l.code + ')'}</option>`).join('');
-/* Платформы: стандартные + свои (хранятся в настройках). Пункт «＋ Своя…» есть в каждом списке. */
-const NEW_PLATFORM = '__new__';
-const allPlatforms = extra => [...new Set([...PLATFORMS, ...state.settings.platforms, ...state.datasets.map(d => d.platform), extra].filter(Boolean))];
-const platformOptions = sel => '<option value="">— платформа —</option>' + allPlatforms(sel).map(p => `<option value="${esc(p)}"${p === sel ? ' selected' : ''}>${esc(p)}</option>`).join('') + `<option value="${NEW_PLATFORM}">＋ Своя платформа…</option>`;
-document.addEventListener('change', e => {                       // фаза перехвата: срабатывает раньше остальных обработчиков
-  const sel = e.target; if (sel.tagName !== 'SELECT' || sel.value !== NEW_PLATFORM) return;
-  const prev = ([...sel.options].find(o => o.defaultSelected) || {}).value || '';
-  const name = (prompt('Название платформы (например, Desktop, Seller, Huawei):') || '').trim().slice(0, 40);
-  if (name && !allPlatforms().includes(name)) { state.settings.platforms.push(name); saveSettings(); }
-  sel.innerHTML = platformOptions(name || prev);
-  if (sel.id !== 'pastePlatform') $('pastePlatform').innerHTML = platformOptions($('pastePlatform').value);
-}, true);
 
 function addDataset(d) {
   d.id = ++state.seq;
@@ -1159,9 +1137,8 @@ function addDataset(d) {
 function renderDatasets() {
   const el = $('datasets');
   if (!state.datasets.length) { el.innerHTML = '<div class="hint" style="margin-top:8px">Данные пока не загружены.</div>'; }
-  else el.innerHTML = '<table class="simple"><thead><tr><th>Набор</th><th>Тип</th><th>Строк</th><th>Платформа</th><th>Язык перевода</th><th></th></tr></thead><tbody>' +
+  else el.innerHTML = '<table class="simple"><thead><tr><th>Набор</th><th>Тип</th><th>Строк</th><th>Язык перевода</th><th></th></tr></thead><tbody>' +
     state.datasets.map(d => `<tr data-id="${d.id}"><td>${esc(d.name)}</td><td><span class="tag">${{ paste: 'вставка', sheet: 'таблица', po: '.po' }[d.kind]}</span></td><td>${d.rows.length}</td>
-      <td><select data-act="platform">${platformOptions(d.platform)}</select></td>
       <td><select data-act="lang"${d.lang ? '' : ' style="border-color:var(--crit)"'}>${langOptions(d.lang)}</select></td>
       <td style="text-align:right">${d.kind === 'po' ? '<button class="btn small" data-act="po">Скачать .po с пометками</button> ' : ''}<button class="btn small" data-act="del">Удалить</button></td></tr>`).join('') + '</tbody></table>';
   const g = state.glossary;
@@ -1191,7 +1168,6 @@ $('tabs').addEventListener('click', e => {
   for (const p of document.querySelectorAll('.pane')) p.classList.toggle('on', p.id === 'pane-' + t);
 });
 $('pasteLang').innerHTML = langOptions('');
-$('pastePlatform').innerHTML = platformOptions('');
 
 /* ---------- вставка текста ---------- */
 let pasteN = 0;
@@ -1203,7 +1179,7 @@ $('btnPaste').onclick = () => {
   if (rows.length && rows[0].every(c => /^(key|ключ|id|source|исходник|исходный текст|перевод|target|translation|русский)$/i.test(c.trim()))) rows = rows.slice(1);
   const cols = Math.max(...rows.map(r => r.length));
   if (cols < 2) return alert('Не удалось найти колонки. Ожидается: ключ ⇥ исходник ⇥ перевод, разделитель — табуляция.');
-  addDataset({ name: 'Вставка ' + (++pasteN), kind: 'paste', lang: $('pasteLang').value, platform: $('pastePlatform').value,
+  addDataset({ name: 'Вставка ' + (++pasteN), kind: 'paste', lang: $('pasteLang').value,
     rows: rows.map((r, i) => cols >= 3 ? { key: r[0] || '', src: r[1] || '', tgt: r[2] || '' } : { key: String(i + 1), src: r[0] || '', tgt: r[1] || '' }) });
   $('pasteArea').value = '';
 };
@@ -1214,7 +1190,7 @@ $('filePo').onchange = async e => {
     try {
       const po = parsePO(new TextDecoder('utf-8').decode(await file.arrayBuffer()));
       const lang = LANGUAGES[po.lang] && !LANGUAGES[po.lang].source ? po.lang : (detectLang(file.name) || (po.lang && po.lang !== SOURCE_LANG ? 'xx' : ''));
-      const d = { name: file.name, kind: 'po', lang: lang === SOURCE_LANG ? '' : lang, platform: detectPlatform(file.name), po, rows: poRows(po) };
+      const d = { name: file.name, kind: 'po', lang: lang === SOURCE_LANG ? '' : lang, po, rows: poRows(po) };
       addDataset(d);
     } catch (err) { alert('Не удалось прочитать ' + file.name + ': ' + err.message); }
   }
@@ -1264,10 +1240,10 @@ function renderMap(guess) {
       if (s < 0) s = ncol >= 3 ? 1 : 0;
       if (t < 0) t = Math.min(ncol - 1, s + 1);
       if (k < 0 && ncol >= 3 && s > 0) k = 0;
-      c.sel = { k, s, t, lang: lang === SOURCE_LANG ? '' : lang, platform: detectPlatform(c.file.name) };
+      c.sel = { k, s, t, lang: lang === SOURCE_LANG ? '' : lang };
     }
     html += colSel('mKey', 'Ключ', c.sel.k, true) + colSel('mSrc', 'Исходник (русский)', c.sel.s) + colSel('mTgt', 'Перевод', c.sel.t)
-      + `<label class="f">Язык перевода<select id="mLang">${langOptions(c.sel.lang)}</select></label><label class="f">Платформа<select id="mPlatform">${platformOptions(c.sel.platform)}</select></label></div>`;
+      + `<label class="f">Язык перевода<select id="mLang">${langOptions(c.sel.lang)}</select></label></div>`;
   } else {
     if (guess) {
       let ru = find(/^(ru|rus)$|русск|термин|исходн|source|^term/i); if (ru < 0) ru = 0;
@@ -1294,7 +1270,7 @@ $('mapOk').onclick = () => {
     const k = v('mKey'), s = v('mSrc'), t = v('mTgt');
     if (s === t) return alert('Исходник и перевод — одна и та же колонка.');
     if (!$('mLang').value) return alert('Выберите язык перевода.');
-    addDataset({ name: c.file.name + (c.sheets.length > 1 ? ' · ' + c.sheets[c.sheet].name : ''), kind: 'sheet', lang: $('mLang').value, platform: $('mPlatform').value,
+    addDataset({ name: c.file.name + (c.sheets.length > 1 ? ' · ' + c.sheets[c.sheet].name : ''), kind: 'sheet', lang: $('mLang').value,
       rows: rows.map((r, i) => ({ key: k >= 0 ? (r[k] || '') : String(i + 1), src: r[s] || '', tgt: r[t] || '' })) });
   } else {
     const ru = v('mRu'), fc = v('mForms'), dc = v('mDnt');
@@ -1330,7 +1306,7 @@ async function runChecks() {
   for (const d of state.datasets) {
     if (!d.lang) continue;
     const L = prepLang(getLang(d.lang));
-    for (const r of d.rows) { r.id = rid++; r.ds = d; r.L = L; r.lang = d.lang; r.platform = d.platform; r.file = d.name; rows.push(r); }
+    for (const r of d.rows) { r.id = rid++; r.ds = d; r.L = L; r.lang = d.lang; r.file = d.name; rows.push(r); }
   }
   const skipped = state.datasets.filter(d => !d.lang).length;
   if (!rows.length) { state.result = null; $('secResults').hidden = true; $('progress').textContent = skipped ? 'Укажите язык перевода у загруженных наборов.' : ''; return; }
@@ -1362,7 +1338,7 @@ function renderResults() {
   $('secResults').hidden = false;
   const real = R.findings.filter(f => f.severity !== 'info');
   const by = sev => real.filter(f => f.severity === sev).length;
-  const langs = [...new Set(R.rows.map(r => r.lang))], plats = [...new Set(R.rows.map(r => r.platform))];
+  const langs = [...new Set(R.rows.map(r => r.lang))], files = [...new Set(R.rows.map(r => r.file))];
   $('stats').innerHTML = [
     [R.rows.length, 'строк проверено'], [real.length, 'находок всего'],
     [by('critical'), '<span class="sev critical">Критично</span>'], [by('major'), '<span class="sev major">Важно</span>'], [by('minor'), '<span class="sev minor">Незначительно</span>'],
@@ -1382,9 +1358,9 @@ function renderResults() {
   const fl = state.filter, opt = (v, t, cur) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`;
   $('fType').innerHTML = opt('', 'Все типы проблем', fl.type) + CHECKS.map(c => opt(c.id, c.name, fl.type)).join('');
   $('fSev').innerHTML = opt('', 'Любая важность', fl.sev) + ['critical', 'major', 'minor'].map(s => opt(s, SEVERITY[s], fl.sev)).join('');
-  if (fl.platform && !plats.includes(fl.platform === '—' ? '' : fl.platform)) fl.platform = '';
+  if (fl.file && !files.includes(fl.file)) fl.file = '';
   if (fl.lang && !langs.includes(fl.lang)) fl.lang = '';
-  $('fPlatform').innerHTML = opt('', 'Все платформы', fl.platform) + plats.map(p => opt(p || '—', p || 'Без платформы', fl.platform)).join('');
+  $('fFile').innerHTML = opt('', 'Все файлы', fl.file) + files.map(p => opt(p, cut(p, 40), fl.file)).join('');
   $('fLang').innerHTML = opt('', 'Все языки', fl.lang) + langs.map(l => opt(l, getLang(l).name, fl.lang)).join('');
   renderTable();
 }
@@ -1408,7 +1384,7 @@ function filtered() {
     if (fl.type && f.check !== fl.type) return false;
     if (fl.sev && f.severity !== fl.sev) return false;
     if (fl.lang && f.row.lang !== fl.lang) return false;
-    if (fl.platform && (f.row.platform || '—') !== fl.platform) return false;
+    if (fl.file && f.row.file !== fl.file) return false;
     if (q && !(f.row.key + '\n' + f.row.src + '\n' + f.row.tgt + '\n' + f.message + '\n' + f.type + '\n' + f.row.file).toLowerCase().includes(q)) return false;
     return true;
   });
@@ -1435,7 +1411,7 @@ function renderTable() {
   $('resBody').innerHTML = slice.length ? slice.map((f, i) => {
     const r = f.row, L = r.L, bad = f.severity === 'critical' ? 'bad' : '';
     return `<tr style="--i:${Math.min(i, 24)}"><td class="key">${esc(r.key)}</td>
-      <td class="small">${esc(r.file)}${r.platform ? '<br><span class="tag">' + r.platform + '</span>' : ''}</td>
+      <td class="small">${esc(r.file)}</td>
       <td class="small">${esc(L.name)}${L.basic ? '' : '<br><span class="tag">' + L.code + '</span>'}</td>
       <td class="txt" lang="ru">${highlight(r.src, f.hlSrc, '')}</td>
       <td class="txt" lang="${L.basic ? '' : L.code}" dir="${L.dir}">${highlight(r.tgt, f.hlTgt, bad)}</td>
@@ -1449,29 +1425,29 @@ function renderTable() {
 }
 
 const bindFilter = (id, key, ev) => $(id).addEventListener(ev || 'change', e => { state.filter[key] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; state.filter.page = 0; renderTable(); });
-bindFilter('fType', 'type'); bindFilter('fSev', 'sev'); bindFilter('fPlatform', 'platform'); bindFilter('fLang', 'lang'); bindFilter('fSearch', 'q', 'input'); bindFilter('fInfo', 'info');
+bindFilter('fType', 'type'); bindFilter('fSev', 'sev'); bindFilter('fFile', 'file'); bindFilter('fLang', 'lang'); bindFilter('fSearch', 'q', 'input'); bindFilter('fInfo', 'info');
 $('pageSize').onchange = e => { state.filter.size = +e.target.value; state.filter.page = 0; renderTable(); };
 $('pgPrev').onclick = () => { state.filter.page--; renderTable(); };
 $('pgNext').onclick = () => { state.filter.page++; renderTable(); };
-$('btnResetFilters').onclick = () => { Object.assign(state.filter, { type: '', sev: '', platform: '', lang: '', q: '', page: 0 }); $('fSearch').value = ''; renderResults(); };
+$('btnResetFilters').onclick = () => { Object.assign(state.filter, { type: '', sev: '', file: '', lang: '', q: '', page: 0 }); $('fSearch').value = ''; renderResults(); };
 $('matrix').addEventListener('click', e => {
   const td = e.target.closest('td.n'); if (!td) return;
-  Object.assign(state.filter, { type: td.dataset.type, lang: td.dataset.lang, sev: '', platform: '', q: '', page: 0 }); $('fSearch').value = ''; renderResults();
+  Object.assign(state.filter, { type: td.dataset.type, lang: td.dataset.lang, sev: '', file: '', q: '', page: 0 }); $('fSearch').value = ''; renderResults();
 });
 
 /* ---------- экспорт ---------- */
 function exportRows() {
-  const head = ['Ключ', 'Файл', 'Платформа', 'Язык', 'Исходник', 'Перевод', 'Тип проблемы', 'Подтип', 'Важность', 'Пояснение'];
-  return [head].concat(filtered().map(f => [f.row.key, f.row.file, f.row.platform, f.row.L.name, f.row.src, f.row.tgt, checkName(f.check), f.type, SEVERITY[f.severity], f.message]));
+  const head = ['Ключ', 'Файл', 'Язык', 'Исходник', 'Перевод', 'Тип проблемы', 'Подтип', 'Важность', 'Пояснение'];
+  return [head].concat(filtered().map(f => [f.row.key, f.row.file, f.row.L.name, f.row.src, f.row.tgt, checkName(f.check), f.type, SEVERITY[f.severity], f.message]));
 }
 /* Только проблемные строки: одна строка на запись, все её находки собраны в одну ячейку. Учитывает фильтры. */
 function exportProblemRows() {
   const by = new Map();
   for (const f of filtered()) { if (f.severity === 'info') continue; if (!by.has(f.row)) by.set(f.row, []); by.get(f.row).push(f); }
-  const head = ['Ключ', 'Файл', 'Платформа', 'Язык', 'Исходник', 'Перевод', 'Важность', 'Кол-во проблем', 'Проблемы'];
+  const head = ['Ключ', 'Файл', 'Язык', 'Исходник', 'Перевод', 'Важность', 'Кол-во проблем', 'Проблемы'];
   return [head].concat([...by.entries()].map(([r, fs]) => {
     const worst = fs.reduce((a, f) => SEV_ORDER[f.severity] < SEV_ORDER[a] ? f.severity : a, 'minor');
-    return [r.key, r.file, r.platform, r.L.name, r.src, r.tgt, SEVERITY[worst], fs.length, fs.map(f => '[' + SEVERITY[f.severity] + '] ' + f.type + ': ' + f.message).join('\n')];
+    return [r.key, r.file, r.L.name, r.src, r.tgt, SEVERITY[worst], fs.length, fs.map(f => '[' + SEVERITY[f.severity] + '] ' + f.type + ': ' + f.message).join('\n')];
   }));
 }
 const stamp = () => new Date().toISOString().slice(0, 10);
@@ -1489,22 +1465,21 @@ function saveXlsx(name, sheet, rows, widths) {
   XLSX.writeFile(wb, name + '-' + stamp() + '.xlsx');
 }
 $('btnCsv').onclick = () => saveCsv('lqa-desk-nahodki', exportRows());
-$('btnXlsx').onclick = () => saveXlsx('lqa-desk-nahodki', 'Находки', exportRows(), [18, 20, 10, 14, 50, 50, 24, 26, 14, 60]);
+$('btnXlsx').onclick = () => saveXlsx('lqa-desk-nahodki', 'Находки', exportRows(), [18, 20, 14, 50, 50, 24, 26, 14, 60]);
 $('btnRowsCsv').onclick = () => saveCsv('lqa-desk-problemnye-stroki', exportProblemRows());
-$('btnRowsXlsx').onclick = () => saveXlsx('lqa-desk-problemnye-stroki', 'Проблемные строки', exportProblemRows(), [18, 20, 10, 14, 50, 50, 14, 10, 80]);
+$('btnRowsXlsx').onclick = () => saveXlsx('lqa-desk-problemnye-stroki', 'Проблемные строки', exportProblemRows(), [18, 20, 14, 50, 50, 14, 10, 80]);
 
 /* ---------- настройки ---------- */
 $('btnSettings').onclick = () => { renderSettings(state.settings); $('dlgSettings').showModal(); };
 function renderSettings(s) {
   $('setBody').innerHTML = `<label class="f" style="max-width:420px">Не проверять длину, если исходник короче (символов)<input type="number" id="setMinLen" min="0" value="${s.minLen}"></label>
-    <label class="f" style="max-width:420px;margin-top:12px">Свои платформы (через запятую; Web, Android и iOS есть всегда)<input type="text" id="setPlatforms" value="${esc((s.platforms || []).join(', '))}" placeholder="Desktop, Seller"></label>
     <div style="margin:14px 0 6px;font-weight:500">Допустимое отношение длины перевода к исходнику</div>
     <table class="simple" style="max-width:560px"><thead><tr><th>Язык</th><th>Письменность</th><th>Мин.</th><th>Макс.</th></tr></thead><tbody>` +
     targetLangs().map(L => { const r = s.ranges[L.code] || L.lengthRatio; return `<tr><td>${esc(L.name)}</td><td class="hint">${esc(L.script)}</td><td><input type="number" step="0.05" min="0" style="width:80px" data-r="${L.code}" data-i="0" value="${r[0]}"></td><td><input type="number" step="0.05" min="0" style="width:80px" data-r="${L.code}" data-i="1" value="${r[1]}"></td></tr>`; }).join('') +
     '</tbody></table><div class="hint" style="margin-top:8px">Настройки хранятся только в этом браузере. Загруженные строки и глоссарий нигде не сохраняются.</div>';
 }
 $('setCancel').onclick = () => $('dlgSettings').close();
-$('setReset').onclick = () => renderSettings({ minLen: 10, ranges: {}, platforms: [] });
+$('setReset').onclick = () => renderSettings({ minLen: 10, ranges: {} });
 $('setOk').onclick = () => {
   const ranges = {};
   for (const L of targetLangs()) {
@@ -1513,26 +1488,25 @@ $('setOk').onclick = () => {
     if (lo !== L.lengthRatio[0] || hi !== L.lengthRatio[1]) ranges[L.code] = [lo, hi];
   }
   state.settings.ranges = ranges; state.settings.minLen = Math.max(0, parseInt($('setMinLen').value, 10) || 0);
-  state.settings.platforms = [...new Set($('setPlatforms').value.split(',').map(x => x.trim().slice(0, 40)).filter(x => x && !PLATFORMS.includes(x)))];
-  saveSettings(); $('dlgSettings').close(); $('pastePlatform').innerHTML = platformOptions($('pastePlatform').value); renderDatasets(); scheduleRun();
+  saveSettings(); $('dlgSettings').close(); scheduleRun();
 };
 
 /* ---------- очистка и пример ---------- */
 $('btnClear').onclick = () => { if (!state.datasets.length && !state.glossary) return; if (confirm('Удалить все загруженные данные и глоссарий?')) { state.datasets = []; state.glossary = null; renderDatasets(); scheduleRun(); } };
 $('btnDemo').onclick = () => {
-  const mk = (name, lang, platform, lines) => addDataset({ name, kind: 'paste', lang, platform, rows: lines.map(l => { const [key, src, tgt] = l.split('|'); return { key, src, tgt: tgt || '' }; }) });
-  mk('Пример · en · Web', 'en', 'Web', [
+  const mk = (name, lang, lines) => addDataset({ name, kind: 'paste', lang, rows: lines.map(l => { const [key, src, tgt] = l.split('|'); return { key, src, tgt: tgt || '' }; }) });
+  mk('Пример · en · Web', 'en', [
     'cart.title|Корзина|Cart', 'order.count|У вас {count} заказов|You have {cnt} orders', 'order.status|Заказ №%1$s доставлен %2$s|Delivered on %2$s: order #%1$s',
     'order.pos|Заказ %s на сумму %d ₽|%d ₽ for the order %s', 'pay.btn|Оплатить|Оплатить', 'list.empty|Список пуст.|',
     'delivery.info|Доставка в пункт выдачи бесплатна.|Shipping to the pickup point is  free .', 'promo.text|Скидка действует до конца недели!|The discount is valid until the end of the week',
     'wallet.open|Откройте WB Кошелёк в приложении|Open the WB Wallet in the app', 'order.sent|Ваш заказ отправлен.|Your order has been shipped.', 'html.bold|Нажмите <b>Оформить</b>, чтобы продолжить|Tap Checkout to continue',
   ]);
-  mk('Пример · en · Android', 'en', 'Android', ['order_sent|Ваш заказ отправлен.|Your order was sent.', 'cart_title|Корзина|Basket']);
-  mk('Пример · tr · iOS', 'tr', 'iOS', ['order.sent|Ваш заказ отправлен.|Siparişiniz gönderildi.', 'wallet.open|Откройте WB Кошелёк в приложении|Uygulamada WB Cüzdan\'ı açın']);
-  mk('Пример · ka · Web', 'ka', 'Web', ['order.sent|Ваш заказ отправлен.|თქვენი შეკვეთა გაგზავნილია.', 'order.in|Товары в заказе|პროდუქტები შეკვეთაში']);
-  mk('Пример · hy · Web', 'hy', 'Web', ['order.sent|Ваш заказ отправлен.|Ձեր պատվերն ուղարկված է.', 'order.q|Отменить заказ?|Չեղարկե՞լ պատվերը']);
-  mk('Пример · he · Web', 'he', 'Web', ['order.sent|Ваш заказ отправлен.|ההזמנה שלך נשלחה.', 'order.num|Заказ №%1$s оформлен|הזמנה מס\' s$1% בוצעה']);
-  mk('Пример · zh · Web', 'zh', 'Web', ['order.sent|Ваш заказ отправлен.|您的订单已发货.', 'order.q|Отменить заказ?|取消订单？']);
+  mk('Пример · en · Android', 'en', ['order_sent|Ваш заказ отправлен.|Your order was sent.', 'cart_title|Корзина|Basket']);
+  mk('Пример · tr · iOS', 'tr', ['order.sent|Ваш заказ отправлен.|Siparişiniz gönderildi.', 'wallet.open|Откройте WB Кошелёк в приложении|Uygulamada WB Cüzdan\'ı açın']);
+  mk('Пример · ka · Web', 'ka', ['order.sent|Ваш заказ отправлен.|თქვენი შეკვეთა გაგზავნილია.', 'order.in|Товары в заказе|პროდუქტები შეკვეთაში']);
+  mk('Пример · hy · Web', 'hy', ['order.sent|Ваш заказ отправлен.|Ձեր պատվերն ուղարկված է.', 'order.q|Отменить заказ?|Չեղարկե՞լ պատվերը']);
+  mk('Пример · he · Web', 'he', ['order.sent|Ваш заказ отправлен.|ההזמנה שלך נשלחה.', 'order.num|Заказ №%1$s оформлен|הזמנה מס\' s$1% בוצעה']);
+  mk('Пример · zh · Web', 'zh', ['order.sent|Ваш заказ отправлен.|您的订单已发货.', 'order.q|Отменить заказ?|取消订单？']);
   setGlossary({ name: 'Пример глоссария', langs: ['en', 'tr', 'ka', 'hy', 'he', 'zh'], terms: [
     { ru: 'заказ', forms: [], dnt: false, tr: { en: ['order'], tr: ['sipariş'], ka: ['შეკვეთა'], hy: ['պատվեր'], he: ['הזמנה'], zh: ['订单'] } },
     { ru: 'доставка', forms: [], dnt: false, tr: { en: ['delivery'] } },
