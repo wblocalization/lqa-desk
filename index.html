@@ -246,7 +246,7 @@ dialog .df{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:8
         <span class="hint" style="margin-left:8px">Все находки:</span>
         <button class="btn" id="btnXlsx" title="Подробный отчёт: одна строка на каждую находку">Excel</button>
         <button class="btn" id="btnCsv" title="Подробный отчёт: одна строка на каждую находку">CSV</button>
-        <button class="btn" id="btnPoAll" hidden>Скачать .po с пометками</button>
+        <button class="btn" id="btnPoAll" hidden title="В файл попадают только записи с находками: каждая помечена fuzzy и комментарием #. QA. Текст перевода не меняется">Скачать .po: только проблемные</button>
       </div>
       <div class="tablewrap">
         <table class="res">
@@ -1085,7 +1085,8 @@ function poRows(po) {
   }
   return rows;
 }
-/* .po с пометками: fuzzy + «#. QA: …». Текст msgid/msgstr не трогаем — строки файла переносятся как есть. */
+/* .po только с проблемными строками: заголовок файла + записи с находками, у каждой fuzzy и «#. QA: …».
+   Текст msgid/msgstr не трогаем — строки записи переносятся как есть. Возвращает null, если проблемных записей нет. */
 function annotatePO(ds, findings) {
   const byEntry = new Map();
   for (const f of findings) {
@@ -1093,9 +1094,10 @@ function annotatePO(ds, findings) {
     if (!byEntry.has(f.row.entry)) byEntry.set(f.row.entry, []);
     byEntry.get(f.row.entry).push(f);
   }
-  const blocks = ds.po.entries.map(e => {
+  if (!byEntry.size) return null;
+  const blocks = ds.po.entries.filter(e => byEntry.has(e) || (e.msgid === '' && !e.obsolete)).map(e => {
     const fs = byEntry.get(e);
-    if (!fs) return e.lines.join(ds.po.eol);
+    if (!fs) return e.lines.join(ds.po.eol);          // заголовок файла — без изменений
     const lines = e.lines.filter(l => !/^#\.\s*QA:/.test(l.trim()));
     const notes = [...new Set(fs.map(f => '#. QA: [' + SEVERITY[f.severity] + '] ' + checkName(f.check) + ' — ' + f.type + ': ' + f.message.replace(/\s+/g, ' ')))];
     let at = 0;
@@ -1140,7 +1142,7 @@ function renderDatasets() {
   else el.innerHTML = '<table class="simple"><thead><tr><th>Набор</th><th>Тип</th><th>Строк</th><th>Язык перевода</th><th></th></tr></thead><tbody>' +
     state.datasets.map(d => `<tr data-id="${d.id}"><td>${esc(d.name)}</td><td><span class="tag">${{ paste: 'вставка', sheet: 'таблица', po: '.po' }[d.kind]}</span></td><td>${d.rows.length}</td>
       <td><select data-act="lang"${d.lang ? '' : ' style="border-color:var(--crit)"'}>${langOptions(d.lang)}</select></td>
-      <td style="text-align:right">${d.kind === 'po' ? '<button class="btn small" data-act="po">Скачать .po с пометками</button> ' : ''}<button class="btn small" data-act="del">Удалить</button></td></tr>`).join('') + '</tbody></table>';
+      <td style="text-align:right">${d.kind === 'po' ? '<button class="btn small" data-act="po" title="Только записи с находками, с пометками fuzzy и #. QA">.po: только проблемные</button> ' : ''}<button class="btn small" data-act="del">Удалить</button></td></tr>`).join('') + '</tbody></table>';
   const g = state.glossary;
   $('glossInfo').innerHTML = g
     ? `<span><b>Глоссарий:</b> ${esc(g.name)} — терминов: ${g.terms.length}, из них «не переводится»: ${g.terms.filter(t => t.dnt).length}; языки: ${g.langs.map(c => esc(getLang(c).name)).join(', ') || '—'}</span><span class="spacer"></span><button class="btn small" id="glossDel">Убрать глоссарий</button>`
@@ -1204,7 +1206,9 @@ function download(name, content, type) {
 }
 function downloadPO(list) {
   if (!state.result) return alert('Сначала запустите проверку.');
-  list.forEach((d, i) => setTimeout(() => download(d.name.replace(/\.pot?$/i, '') + '.qa.po', annotatePO(d, state.result.findings), 'text/x-gettext-translation;charset=utf-8'), i * 400));
+  const out = list.map(d => [d, annotatePO(d, state.result.findings)]).filter(x => x[1]);
+  if (!out.length) return alert('В .po нет проблемных строк — выгружать нечего.');
+  out.forEach(([d, text], i) => setTimeout(() => download(d.name.replace(/\.pot?$/i, '') + '.qa.po', text, 'text/x-gettext-translation;charset=utf-8'), i * 400));
 }
 $('btnPoAll').onclick = () => downloadPO(state.datasets.filter(d => d.kind === 'po'));
 
