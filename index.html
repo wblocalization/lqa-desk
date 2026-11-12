@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LQA Desk — техническая проверка переводов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600&family=Noto+Sans+Georgian:wght@400;600&family=Noto+Sans+Armenian:wght@400;600&family=Noto+Sans+Ethiopic:wght@400;600&family=Noto+Sans+Hebrew:wght@400;600&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+<script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f5f6f8; --card:#fff; --line:#e2e5ea; --line2:#eef0f3; --text:#1f2530; --muted:#687182;
+  --accent:#2f5bd8; --accent-bg:#eaf0ff;
+  --crit:#b3261e; --crit-bg:#fdecea; --maj:#9a5b00; --maj-bg:#fff3dc; --min:#4f5968; --min-bg:#eceff3; --ok:#1e7a46; --ok-bg:#e6f5ec;
+  --hl:#ffe08a; --hl2:#ffc9c4;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.45 "Noto Sans","Noto Sans Georgian","Noto Sans Armenian","Noto Sans Ethiopic","Noto Sans Hebrew","Noto Sans SC",system-ui,-apple-system,"Segoe UI",sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+header.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+header.top h1{font-size:18px;margin:0;font-weight:600}
+header.top .sub{color:var(--muted);font-size:13px}
+.spacer{flex:1}
+main{max-width:1500px;margin:0 auto;padding:18px 24px 60px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.card h2{font-size:14px;margin:0 0 10px;font-weight:600}
+.btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#f3f5f8}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#274dbb}
+.btn.small{padding:3px 8px;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:default}
+select,input[type=text],input[type=search],input[type=number],textarea{border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:#fff}
+select:focus,input:focus,textarea:focus,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+textarea{width:100%;min-height:110px;resize:vertical;font-size:13px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:-2px 0 12px}
+.tabs button{border:0;background:none;padding:7px 12px;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted)}
+.tabs button.on{color:var(--text);border-bottom-color:var(--accent);font-weight:500}
+.pane{display:none}.pane.on{display:block}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.row.mt{margin-top:10px}
+.hint{color:var(--muted);font-size:12.5px}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted)}
+label.f>*{color:var(--text);font-size:14px}
+label.chk{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:16px;padding:3px 11px 3px 8px;cursor:pointer;user-select:none;background:#fff}
+label.chk:has(input:checked){background:var(--accent-bg);border-color:#c5d3fb}
+table{border-collapse:collapse;width:100%}
+table.simple th,table.simple td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line2);vertical-align:middle}
+table.simple th{font-weight:500;color:var(--muted);font-size:12.5px}
+#datasets{margin-top:12px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:120px;background:#fff}
+.stat b{display:block;font-size:20px;font-weight:600}
+.stat span{color:var(--muted);font-size:12.5px}
+.matrix{overflow:auto}
+.matrix table{width:auto}
+.matrix th,.matrix td{padding:4px 10px;border-bottom:1px solid var(--line2);text-align:right;font-size:13px}
+.matrix th:first-child,.matrix td:first-child{text-align:left}
+.matrix th{color:var(--muted);font-weight:500}
+.matrix td.n{cursor:pointer;color:var(--accent)}
+.matrix td.n:hover{text-decoration:underline}
+.matrix td.z{color:#c3c8d0}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.filters input[type=search]{min-width:220px;flex:1}
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+table.res{table-layout:fixed;min-width:1180px}
+table.res th{position:sticky;top:0;background:#f8f9fb;text-align:left;font-weight:500;font-size:12.5px;color:var(--muted);padding:8px;border-bottom:1px solid var(--line);z-index:1}
+table.res td{padding:8px;border-bottom:1px solid var(--line2);vertical-align:top;overflow-wrap:anywhere}
+table.res tr:hover td{background:#fafbfd}
+td.txt{white-space:pre-wrap;font-size:14px}
+td.key{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#3b4454}
+td.small{font-size:12.5px}
+mark{background:var(--hl);color:inherit;border-radius:2px;padding:0 1px}
+mark.bad{background:var(--hl2)}
+mark.ws{outline:1px solid #d99a00}
+.sev{display:inline-block;border-radius:10px;padding:1px 9px;font-size:12px;font-weight:500;white-space:nowrap}
+.sev.critical{background:var(--crit-bg);color:var(--crit)}
+.sev.major{background:var(--maj-bg);color:var(--maj)}
+.sev.minor{background:var(--min-bg);color:var(--min)}
+.sev.info{background:var(--ok-bg);color:var(--ok)}
+.tag{display:inline-block;border:1px solid var(--line);border-radius:4px;padding:0 6px;font-size:12px;color:var(--muted);background:#fafbfc}
+.pager{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:10px;color:var(--muted);font-size:13px}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+dialog{border:1px solid var(--line);border-radius:10px;padding:0;max-width:min(900px,94vw);width:900px;color:var(--text)}
+dialog::backdrop{background:rgba(20,25,35,.35)}
+dialog .dh{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:600}
+dialog .db{padding:14px 18px;max-height:68vh;overflow:auto}
+dialog .df{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.preview{margin-top:12px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.preview td,.preview th{padding:4px 8px;border-bottom:1px solid var(--line2);font-size:12.5px;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.preview th{background:#f8f9fb;color:var(--muted);font-weight:500}
+#progress{color:var(--muted);font-size:13px}
+.glossbox{border:1px dashed var(--line);border-radius:6px;padding:8px 12px;background:#fafbfc}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>LQA Desk</h1>
+  <span class="sub">Техническая проверка переводов · только правила, без ИИ · данные обрабатываются локально в браузере</span>
+  <span class="spacer"></span>
+  <button class="btn" id="btnDemo">Загрузить пример</button>
+  <button class="btn" id="btnClear">Очистить всё</button>
+  <button class="btn" id="btnSettings">Настройки</button>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. Данные</h2>
+    <div class="tabs" id="tabs">
+      <button data-tab="paste" class="on">Вставить текст</button>
+      <button data-tab="sheet">Excel / CSV</button>
+      <button data-tab="po">Файлы .po</button>
+      <button data-tab="gloss">Глоссарий</button>
+    </div>
+
+    <div class="pane on" id="pane-paste">
+      <textarea id="pasteArea" placeholder="Вставьте таблицу из буфера: ключ ⇥ исходник ⇥ перевод (через табуляцию, по строке на запись). Если колонок две — это исходник и перевод."></textarea>
+      <div class="row mt">
+        <label class="f">Язык перевода<select id="pasteLang"></select></label>
+        <label class="f">Платформа<select id="pastePlatform"></select></label>
+        <button class="btn primary" id="btnPaste" style="align-self:flex-end">Добавить строки</button>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-sheet">
+      <div class="row">
+        <input type="file" id="fileSheet" accept=".xlsx,.xls,.ods,.csv,.tsv,.txt" multiple>
+        <span class="hint">После загрузки нужно выбрать колонки: ключ, исходник, перевод. Язык и платформа определяются по имени файла — их можно поправить.</span>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-po">
+      <div class="row">
+        <input type="file" id="filePo" accept=".po,.pot" multiple>
+        <span class="hint">Можно выбрать несколько файлов сразу. msgid — русский исходник, msgstr — перевод. Язык берётся из заголовка «Language:» или из имени файла (например, android_ka.po).</span>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-gloss">
+      <div class="row">
+        <input type="file" id="fileGloss" accept=".xlsx,.xls,.ods,.csv,.tsv,.txt">
+        <span class="hint">Формат: колонка с русским термином, далее языки колонками (en, ka, kk…). Необязательные колонки: «Допустимые формы» (через ;) и «Не переводится» (да / 1 / x). Несколько вариантов перевода в ячейке — через ; или |.</span>
+      </div>
+    </div>
+
+    <div class="glossbox row mt" id="glossInfo"></div>
+    <div id="datasets"></div>
+  </section>
+
+  <section class="card">
+    <h2>2. Проверки</h2>
+    <div class="row" id="checkToggles"></div>
+    <div class="row mt">
+      <button class="btn primary" id="btnRun">Проверить</button>
+      <span id="progress"></span>
+    </div>
+  </section>
+
+  <section id="secResults" hidden>
+    <div class="card">
+      <h2>3. Результаты</h2>
+      <div class="stats" id="stats"></div>
+      <div class="matrix" id="matrix"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="filters">
+        <select id="fType" title="Тип проблемы"></select>
+        <select id="fSev" title="Важность"></select>
+        <select id="fPlatform" title="Платформа"></select>
+        <select id="fLang" title="Язык"></select>
+        <input type="search" id="fSearch" placeholder="Поиск по ключу, тексту, пояснению…">
+        <label class="chk" title="Показывать строки, где термин глоссария найден, и в какой форме"><input type="checkbox" id="fInfo">Совпадения с глоссарием</label>
+        <button class="btn" id="btnResetFilters">Сбросить</button>
+      </div>
+      <div class="filters">
+        <span class="hint" id="shown"></span>
+        <span class="spacer"></span>
+        <button class="btn" id="btnXlsx">Экспорт в Excel</button>
+        <button class="btn" id="btnCsv">Экспорт в CSV</button>
+        <button class="btn" id="btnPoAll" hidden>Скачать .po с пометками</button>
+      </div>
+      <div class="tablewrap">
+        <table class="res">
+          <colgroup><col style="width:11%"><col style="width:9%"><col style="width:7%"><col style="width:20%"><col style="width:20%"><col style="width:11%"><col style="width:8%"><col style="width:14%"></colgroup>
+          <thead><tr><th>Ключ</th><th>Файл / платформа</th><th>Язык</th><th>Исходник</th><th>Перевод</th><th>Тип проблемы</th><th>Важность</th><th>Пояснение</th></tr></thead>
+          <tbody id="resBody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span>На странице</span>
+        <select id="pageSize"><option>50</option><option selected>100</option><option>250</option><option>500</option></select>
+        <button class="btn small" id="pgPrev">‹ Назад</button>
+        <span id="pgInfo"></span>
+        <button class="btn small" id="pgNext">Вперёд ›</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlgMap">
+  <div class="dh" id="mapTitle"></div>
+  <div class="db" id="mapBody"></div>
+  <div class="df"><button class="btn" id="mapCancel">Отмена</button><button class="btn primary" id="mapOk">Загрузить</button></div>
+</dialog>
+
+<dialog id="dlgSettings">
+  <div class="dh">Настройки</div>
+  <div class="db" id="setBody"></div>
+  <div class="df"><button class="btn" id="setReset">Сбросить по умолчанию</button><span class="spacer"></span><button class="btn" id="setCancel">Отмена</button><button class="btn primary" id="setOk">Сохранить</button></div>
+</dialog>
+
+<script>
+'use strict';
+/* =====================================================================
+   1. КОНФИГ ЯЗЫКОВ
+   Новый язык = один объект в LANGUAGES. Логику править не нужно.
+   Поля:
+     code, name, script, dir ('ltr'|'rtl'), locale (для смены регистра),
+     aliases      — как язык опознаётся в именах файлов и заголовках колонок,
+     punct        — знаки препинания (см. P() ниже),
+     suffixes     — окончания/суффиксы (отрезаются от термина; из них же собираются цепочки),
+     prefixes     — приросшие приставки; prefixChain — сколько приставок может идти подряд,
+     prefixSwap   — приставка термина может ЗАМЕНЯТЬСЯ другой (классы суахили),
+     dropFinal    — конечные буквы основы, выпадающие при словоизменении,
+     alternations — чередование конечной согласной основы (kitap → kitabı),
+     fleeting     — беглые гласные {vowels, last},
+     multigraphs  — буквосочетания-«одна буква», которые нельзя разрывать; looseMultigraphs — исключения на стыке основа+суффикс,
+     charMap      — посимвольная замена при нормализации (ё→е, конечные формы букв),
+     stripMarks   — что удалять при нормализации (огласовки, надстрочные знаки),
+     wordChars    — доп. символы, которые считаются частью слова,
+     syllabic     — слоговое письмо: сравнение по «скелету» согласных,
+     fuzzy        — 'lenient' → чаще «Проверить вручную», чем «Не найдено»,
+     spaces       — есть ли пробелы между словами,
+     lengthRatio  — допустимое отношение длины перевода к исходнику [мин, макс],
+     minStem, maxTail, strictBelow — тонкая настройка поиска основы.
+   ===================================================================== */
+
+/* Знаки препинания. Классы: что считается точкой, вопросом и т.д. в данном языке.
+   inWord   — знаки, которые ставятся внутри слова вместо финального знака (армянский),
+   noSpaceBefore — перед какими знаками не бывает пробела,
+   foreign  — «чужие» знаки: {chars, script, where:'adjacent'|'sentenceEnd', hint:{знак: чем заменить}} */
+const P = (o = {}) => Object.assign({
+  period: ['.'], question: ['?'], exclamation: ['!'], comma: [','], colon: [':'], semicolon: [';'],
+  ellipsis: ['…', '...'], inWord: {}, noSpaceBefore: '.,!?:;…', foreign: null
+}, o);
+
+const LANGUAGES = {
+  ru: { code: 'ru', name: 'Русский', script: 'Кириллица', dir: 'ltr', locale: 'ru', source: true,
+    aliases: ['ru', 'rus', 'russian'],
+    punct: P(),
+    suffixes: ['иями', 'ями', 'ами', 'иях', 'иям', 'ией', 'ием', 'ого', 'его', 'ому', 'ему', 'ыми', 'ими', 'ою', 'ею', 'ов', 'ев', 'ей', 'ой', 'ий', 'ый', 'ая', 'яя', 'ое', 'ее', 'ые', 'ие', 'ом', 'ем', 'ам', 'ям', 'ах', 'ях', 'ых', 'их', 'ую', 'юю', 'ым', 'им', 'ью', 'ия', 'ию', 'ии', 'а', 'я', 'ы', 'и', 'у', 'ю', 'е', 'о', 'ь', 'й'],
+    prefixes: [], charMap: { 'ё': 'е' }, fleeting: { vowels: 'ое', last: 'кц' },
+    spaces: true, lengthRatio: [0.7, 1.6] },
+
+  en: { code: 'en', name: 'Английский', script: 'Латиница', dir: 'ltr', locale: 'en',
+    aliases: ['en', 'eng', 'english'],
+    punct: P(),
+    suffixes: ["'s", "s'", 'ies', 'es', 's', 'ing', 'ed'],
+    prefixes: [], dropFinal: ['y', 'e'],
+    spaces: true, lengthRatio: [0.7, 1.6] },
+
+  ka: { code: 'ka', name: 'Грузинский', script: 'Мхедрули', dir: 'ltr', locale: 'ka',
+    aliases: ['ka', 'kat', 'geo', 'ge', 'georgian'],
+    punct: P(),
+    // падежи + приросшие послелоги + -ებ- (мн. число); цепочки собираются автоматически
+    suffixes: ['ისთვის', 'თვის', 'იდან', 'დან', 'თან', 'ვით', 'ში', 'ზე', 'ებ', 'მა', 'ის', 'ით', 'ად', 'აც', 'ს', 'ი', 'ო', 'ც', 'ა'],
+    prefixes: [], dropFinal: ['ი', 'ა'],
+    spaces: true, lengthRatio: [0.7, 1.6] },
+
+  kk: { code: 'kk', name: 'Казахский', script: 'Кириллица', dir: 'ltr', locale: 'kk',
+    aliases: ['kk', 'kaz', 'kz', 'kazakh'],
+    punct: P(),
+    suffixes: ['лар', 'лер', 'дар', 'дер', 'тар', 'тер',
+      'ның', 'нің', 'дың', 'дің', 'тың', 'тің', 'ға', 'ге', 'қа', 'ке', 'на', 'не',
+      'ны', 'ні', 'ды', 'ді', 'ты', 'ті', 'нда', 'нде', 'да', 'де', 'та', 'те',
+      'дан', 'ден', 'тан', 'тен', 'нан', 'нен', 'мен', 'бен', 'пен',
+      'ымыз', 'іміз', 'мыз', 'міз', 'ыңыз', 'іңіз', 'ңыз', 'ңіз', 'ым', 'ім', 'ың', 'ің', 'сы', 'сі',
+      'ы', 'і', 'м', 'ң', 'н', 'а', 'е'],
+    prefixes: [], alternations: { 'п': 'б', 'к': 'г', 'қ': 'ғ' },
+    spaces: true, lengthRatio: [0.7, 1.6], maxTail: 16 },
+
+  uz: { code: 'uz', name: 'Узбекский', script: 'Латиница', dir: 'ltr', locale: 'uz',
+    aliases: ['uz', 'uzb', 'uzbek'],
+    punct: P(),
+    suffixes: ['lar', 'ning', 'ni', 'ga', 'ka', 'qa', 'dan', 'da', 'imiz', 'ingiz', 'lari', 'miz', 'ngiz', 'im', 'ing', 'si', 'i', 'm', 'ng', 'dagi', 'li', 'siz'],
+    prefixes: [], alternations: { 'k': 'g', 'q': "g'" },
+    multigraphs: ['sh', 'ch', 'ng', "o'", "g'"], looseMultigraphs: ['ng'],
+    spaces: true, lengthRatio: [0.7, 1.6], maxTail: 16 },
+
+  ky: { code: 'ky', name: 'Киргизский', script: 'Кириллица', dir: 'ltr', locale: 'ky',
+    aliases: ['ky', 'kir', 'kg', 'kyrgyz'],
+    punct: P(),
+    suffixes: ['лар', 'лер', 'лор', 'лөр', 'дар', 'дер', 'дор', 'дөр', 'тар', 'тер', 'тор', 'төр',
+      'нын', 'нин', 'нун', 'нүн', 'дын', 'дин', 'дун', 'дүн', 'тын', 'тин', 'тун', 'түн',
+      'га', 'ге', 'го', 'гө', 'ка', 'ке', 'ко', 'кө', 'на', 'не',
+      'ны', 'ни', 'ну', 'нү', 'ды', 'ди', 'ду', 'дү', 'ты', 'ти', 'ту', 'тү',
+      'да', 'де', 'до', 'дө', 'та', 'те', 'то', 'тө', 'дан', 'ден', 'дон', 'дөн', 'тан', 'тен', 'тон', 'төн', 'нан', 'нен',
+      'быз', 'биз', 'ыңыз', 'иңиз', 'ым', 'им', 'ум', 'үм', 'ың', 'иң', 'уң', 'үң', 'сы', 'си', 'су', 'сү',
+      'ы', 'и', 'у', 'ү', 'м', 'ң', 'н', 'а', 'е'],
+    prefixes: [], alternations: { 'п': 'б', 'к': 'г' },
+    spaces: true, lengthRatio: [0.7, 1.6], maxTail: 16 },
+
+  hy: { code: 'hy', name: 'Армянский', script: 'Армянское письмо', dir: 'ltr', locale: 'hy',
+    aliases: ['hy', 'hye', 'arm', 'armenian'],
+    // «։» — точка; «՞ ՜ ՛» ставятся над гласной внутри слова; обычная «.» в конце предложения — ошибка
+    punct: P({ period: ['։'], question: ['՞', '?'], exclamation: ['՜', '!'], colon: ['՝', '․', ':'], semicolon: ['․', ';'],
+      inWord: { question: '՞', exclamation: '՜' }, noSpaceBefore: '.,!?:;…։՝',
+      foreign: { chars: '.', script: /\p{Script=Armenian}/u, where: 'sentenceEnd', hint: { '.': '։' } } }),
+    suffixes: ['ների', 'ներ', 'երի', 'եր', 'ից', 'ով', 'ում', 'ին', 'ի', 'ը', 'ն', 'ս', 'դ', 'ու'],
+    prefixes: [], wordChars: '՛՜՞', stripMarks: /[՛՜՞]/g,
+    spaces: true, lengthRatio: [0.7, 1.6] },
+
+  tg: { code: 'tg', name: 'Таджикский', script: 'Кириллица', dir: 'ltr', locale: 'tg',
+    aliases: ['tg', 'tgk', 'tj', 'tajik'],
+    punct: P(),
+    suffixes: ['ҳо', 'гон', 'ён', 'вон', 'он', 'йи', 'ро', 'амон', 'атон', 'ашон', 'ям', 'ят', 'яш', 'ам', 'ат', 'аш', 'е', 'и'],
+    prefixes: [],
+    spaces: true, lengthRatio: [0.7, 1.6] },
+
+  am: { code: 'am', name: 'Амхарский', script: 'Геэз (эфиопское письмо)', dir: 'ltr', locale: 'am',
+    aliases: ['am', 'amh', 'amharic'],
+    punct: P({ period: ['።'], comma: ['፣', '፥', ','], semicolon: ['፤'], colon: ['፦', ':'], question: ['?', '፧'],
+      noSpaceBefore: '.,!?:;…።፣፤፧',
+      foreign: { chars: '.', script: /\p{Script=Ethiopic}/u, where: 'sentenceEnd', hint: { '.': '።' } } }),
+    suffixes: ['ዎች', 'ኦች', 'ች', 'ን', 'ው', 'ዋ', 'ም'],
+    prefixes: ['እንደ', 'ስለ', 'ወደ', 'የ', 'በ', 'ለ', 'ከ'], prefixChain: 2,
+    syllabic: true, fuzzy: 'lenient', minStem: 2,
+    spaces: true, lengthRatio: [0.5, 1.3] },
+
+  az: { code: 'az', name: 'Азербайджанский', script: 'Латиница', dir: 'ltr', locale: 'az',
+    aliases: ['az', 'aze', 'azerbaijani', 'azeri'],
+    punct: P(),
+    suffixes: ['lar', 'lər', 'nın', 'nin', 'nun', 'nün', 'ın', 'in', 'un', 'ün', 'ya', 'yə', 'nı', 'ni', 'nu', 'nü',
+      'dan', 'dən', 'da', 'də', 'ımız', 'imiz', 'umuz', 'ümüz', 'ınız', 'iniz', 'unuz', 'ünüz',
+      'ım', 'im', 'um', 'üm', 'sı', 'si', 'su', 'sü', 'la', 'lə', 'a', 'ə', 'ı', 'i', 'u', 'ü', 'm', 'n'],
+    prefixes: [], alternations: { 'k': 'y', 'q': 'ğ', 't': 'd' },
+    spaces: true, lengthRatio: [0.7, 1.6], maxTail: 16 },
+
+  sw: { code: 'sw', name: 'Суахили', script: 'Латиница', dir: 'ltr', locale: 'sw',
+    aliases: ['sw', 'swa', 'swh', 'swahili'],
+    punct: P(),
+    suffixes: ['ni'],
+    // префиксы именных классов: m-/wa-, m-/mi-, ki-/vi-, ji-/ma- и др.
+    prefixes: ['mw', 'wa', 'mi', 'ki', 'vi', 'ji', 'ma', 'ch', 'vy', 'ny', 'ku', 'pa', 'm', 'n', 'u', 'w'],
+    prefixSwap: true, minStem: 2,
+    spaces: true, lengthRatio: [0.7, 1.6] },
+
+  he: { code: 'he', name: 'Иврит', script: 'Еврейское письмо', dir: 'rtl', locale: 'he',
+    aliases: ['he', 'heb', 'iw', 'hebrew'],
+    punct: P(),
+    suffixes: ['ים', 'ות', 'ת', 'י', 'ה'],
+    prefixes: ['ו', 'ה', 'ב', 'ל', 'מ', 'ש', 'כ'], prefixChain: 3,
+    dropFinal: ['ה'], minStem: 2,
+    stripMarks: /[֑-ׇ]/g,                                   // огласовки (никуд) и знаки кантилляции
+    charMap: { 'ם': 'מ', 'ן': 'נ', 'ץ': 'צ', 'ף': 'פ', 'ך': 'כ' },     // конечные формы букв
+    wordChars: '״׳',
+    spaces: true, lengthRatio: [0.5, 1.3] },
+
+  tr: { code: 'tr', name: 'Турецкий', script: 'Латиница', dir: 'ltr', locale: 'tr',
+    aliases: ['tr', 'tur', 'turkish'],
+    punct: P(),
+    suffixes: ['lar', 'ler', 'nın', 'nin', 'nun', 'nün', 'ın', 'in', 'un', 'ün', 'ya', 'ye',
+      'yı', 'yi', 'yu', 'yü', 'nı', 'ni', 'nu', 'nü', 'ndan', 'nden', 'dan', 'den', 'tan', 'ten',
+      'nda', 'nde', 'da', 'de', 'ta', 'te', 'ımız', 'imiz', 'umuz', 'ümüz', 'ınız', 'iniz', 'unuz', 'ünüz',
+      'ım', 'im', 'um', 'üm', 'sı', 'si', 'su', 'sü', 'yla', 'yle', 'la', 'le', 'a', 'e', 'ı', 'i', 'u', 'ü', 'm', 'n'],
+    prefixes: [], alternations: { 'p': 'b', 'ç': 'c', 't': 'd', 'k': 'ğ' },
+    spaces: true, lengthRatio: [0.7, 1.6], maxTail: 16 },
+
+  zh: { code: 'zh', name: 'Китайский', script: 'Иероглифы (хань)', dir: 'ltr', locale: 'zh',
+    aliases: ['zh', 'zho', 'chi', 'cn', 'chinese', 'hans', 'hant'],
+    // пунктуация полноширинная; полуширинные знаки рядом с иероглифом — ошибка
+    punct: P({ period: ['。'], question: ['？'], exclamation: ['！'], comma: ['，', '、'], colon: ['：'], semicolon: ['；'],
+      ellipsis: ['……', '…'], noSpaceBefore: '',
+      foreign: { chars: ',.!?:;()', script: /\p{Script=Han}/u, where: 'adjacent',
+        hint: { ',': '，', '.': '。', '!': '！', '?': '？', ':': '：', ';': '；', '(': '（', ')': '）' } } }),
+    suffixes: [], prefixes: [],
+    spaces: false, lengthRatio: [0.2, 0.8] },
+};
+
+/* Базовый режим — для языка, которого нет в конфиге: точное совпадение + нечёткий поиск. */
+const BASE_LANG = { code: 'xx', name: 'Другой язык (базовый режим)', script: '—', dir: 'ltr', locale: undefined,
+  aliases: [], punct: P(), suffixes: [], prefixes: [], basic: true, spaces: true, lengthRatio: [0.7, 1.6] };
+
+const SOURCE_LANG = 'ru';
+const PLATFORMS = ['Web', 'Android', 'iOS'];
+
+/* =====================================================================
+   2. УТИЛИТЫ
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&');
+const fmt = n => n.toFixed(2).replace('.', ',');
+const cut = (s, n = 60) => { s = String(s).replace(/\s+/g, ' '); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+const getLang = code => LANGUAGES[code] || BASE_LANG;
+const targetLangs = () => Object.values(LANGUAGES).filter(l => !l.source).concat([BASE_LANG]);
+
+function levenshtein(a, b, max) {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i), cur = new Array(b.length + 1);
+  for (let i = 1; i <= a.length; i++) {
+    cur[0] = i; let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (cur[j] < rowMin) rowMin = cur[j];
+    }
+    if (rowMin > max) return max + 1;
+    [prev, cur] = [cur, prev];
+  }
+  return prev[b.length];
+}
+
+/* =====================================================================
+   3. НОРМАЛИЗАЦИЯ И МОРФОЛОГИЧЕСКИЙ ПОИСК
+   ===================================================================== */
+const INVIS_RE = /[​-‏‪-‮⁠-⁤⁦-⁩­﻿]/g;   // zero-width, мягкий перенос, bidi-метки
+const APOS_RE = /[ʻʼ’‘`´ʹ′]/g;                                                            // все апострофы → '
+
+function prepLang(L) {
+  if (L._ready) return L;
+  L._ready = true;                    // ставим сразу: normalizeText ниже уже можно вызывать
+  if (L.charMap) L._cmRe = new RegExp('[' + Object.keys(L.charMap).join('') + ']', 'g');
+  const norm = a => [...new Set((a || []).map(s => normalizeText(s, L)))].sort((x, y) => y.length - x.length);
+  L._suf = norm(L.suffixes); L._pre = norm(L.prefixes); L._drop = norm(L.dropFinal);
+  L._tokRe = new RegExp("[\\p{L}\\p{M}\\p{N}'ʻʼ’‘`\\u200B-\\u200D\\u00AD" + reEsc(L.wordChars || '') + ']+', 'gu');
+  L._chain = new Map();
+  return L;
+}
+
+function normalizeText(s, L) {
+  s = String(s).normalize('NFC').replace(INVIS_RE, '').replace(APOS_RE, "'");
+  s = L.locale ? s.toLocaleLowerCase(L.locale) : s.toLowerCase();     // tr/az: İ→i, I→ı
+  if (L.stripMarks) s = s.replace(L.stripMarks, '');
+  if (L._cmRe) s = s.replace(L._cmRe, c => L.charMap[c]);
+  return s;
+}
+
+/* Слова текста с позициями в исходной строке (плейсхолдеры и теги замаскированы). */
+function tokenize(text, L) {
+  prepLang(L);
+  const out = [], masked = maskPlaceholders(text);
+  for (const m of masked.matchAll(L._tokRe)) {
+    const n = normalizeText(m[0], L).replace(/^'+|'+$/g, '');
+    if (n) out.push({ n, s: m.index, e: m.index + m[0].length });
+  }
+  return out;
+}
+
+/* Не разрывает ли разрез буквосочетание-«одну букву» (узб. sh, ch, ng, oʻ, gʻ). */
+function splitsMultigraph(word, at, L, strict) {
+  if (!L.multigraphs) return false;
+  for (const mg of L.multigraphs) {
+    if (!strict && L.looseMultigraphs && L.looseMultigraphs.includes(mg)) continue;
+    for (let k = 1; k < mg.length; k++) if (at - k >= 0 && word.substr(at - k, mg.length) === mg) return true;
+  }
+  return false;
+}
+
+/* Хвост слова раскладывается в цепочку известных суффиксов? (агглютинация) */
+function isSuffixChain(rem, L, depth = 0) {
+  if (!rem) return true;
+  if (depth > 5) return false;
+  if (depth === 0 && L._chain.has(rem)) return L._chain.get(rem);
+  let ok = false;
+  for (const s of L._suf) if (rem.startsWith(s) && isSuffixChain(rem.slice(s.length), L, depth + 1)) { ok = true; break; }
+  if (depth === 0) L._chain.set(rem, ok);
+  return ok;
+}
+
+const ethRow = ch => { const c = ch.charCodeAt(0); return c >= 0x1200 && c <= 0x135A ? String.fromCharCode(c & ~7) : ch; };
+const skeleton = w => Array.from(w, ethRow).join('');      // слог геэз → «ряд согласной»
+
+/* Подготовка слова термина: набор основ, по которым оно ищется в тексте. */
+function prepTermWord(w, L) {
+  prepLang(L);
+  const min = L.minStem || 3, stems = [];
+  const add = s => { if (s && !stems.includes(s)) stems.push(s); };
+  const bases = [w];
+  if (L.prefixSwap) for (const p of L._pre) if (w.startsWith(p) && w.length - p.length >= 2) { bases.push(w.slice(p.length)); break; }
+  if (!L.basic) for (const b of bases) {
+    add(b);
+    for (const suf of L._suf) {
+      const at = b.length - suf.length;
+      if (at >= min && b.endsWith(suf) && !splitsMultigraph(b, at, L, true)) { add(b.slice(0, at)); break; }
+    }
+    for (const d of L._drop) if (b.endsWith(d) && b.length - d.length >= min) add(b.slice(0, -d.length));
+    if (L.fleeting && b.length > 3 && L.fleeting.vowels.includes(b[b.length - 2]) && L.fleeting.last.includes(b[b.length - 1]))
+      add(b.slice(0, -2) + b[b.length - 1]);
+  }
+  if (L.alternations) for (const s of [...stems]) {
+    for (const [from, to] of Object.entries(L.alternations)) if (s.endsWith(from)) add(s.slice(0, -from.length) + to);
+  }
+  return { w, stems, skel: L.syllabic ? skeleton(w) : null };
+}
+
+function prefixVariants(tok, L) {
+  if (!L._pre.length) return [tok];
+  const out = [tok]; let frontier = [tok];
+  for (let d = 0; d < (L.prefixChain || 1) && frontier.length; d++) {
+    const next = [];
+    for (const w of frontier) for (const p of L._pre)
+      if (w.length - p.length >= 2 && w.startsWith(p)) { const r = w.slice(p.length); if (!out.includes(r)) { out.push(r); next.push(r); } }
+    frontier = next;
+  }
+  return out;
+}
+
+/* 2 — уверенное совпадение по основе, 1 — основа совпала, но хвост незнакомый, 0 — нет. */
+function stemHit(c, s, L) {
+  if (!c.startsWith(s)) return 0;
+  const rem = c.slice(s.length);
+  if (!rem) return 2;
+  if (rem.length > (L.maxTail || 10)) return 0;
+  if (splitsMultigraph(c, s.length, L, false)) return 0;
+  if (s.length < (L.strictBelow || 5) && !isSuffixChain(rem, L)) return 1;
+  return 2;
+}
+
+function fuzzyThreshold(n, L) {
+  if (L.fuzzy === 'lenient') return n >= 5 ? 2 : n >= 2 ? 1 : 0;
+  return n >= 8 ? 2 : n >= 4 ? 1 : 0;
+}
+
+/* Сопоставление слова термина со словом текста.
+   3 — точно, 2 — другая форма, 1 — похоже (проверить вручную), 0 — нет. */
+function matchToken(tw, tok, L) {
+  if (tok === tw.w) return 3;
+  const vars = prefixVariants(tok, L);
+  let best = 0;
+  if (!L.basic) {
+    for (const c of vars) {
+      if (c === tw.w) return 2;
+      for (const s of tw.stems) { const h = stemHit(c, s, L); if (h === 2) return 2; if (h > best) best = h; }
+      if (L.fleeting && c.length > 3 && L.fleeting.vowels.includes(c[c.length - 2]) && L.fleeting.last.includes(c[c.length - 1])) {
+        const c2 = c.slice(0, -2) + c[c.length - 1];
+        if (tw.stems.includes(c2)) return 2;
+      }
+    }
+  }
+  const n = tw.w.length;
+  if (L.syllabic) {
+    for (const c of vars) {
+      if (c.length >= n) {
+        const head = c.slice(0, n);
+        if (n >= 2 && head.slice(0, -1) === tw.w.slice(0, -1) && ethRow(head[n - 1]) === ethRow(tw.w[n - 1])) return 2;
+        if (skeleton(head) === tw.skel) best = 1;
+      } else if (c.length >= 2 && c.length >= n - 1 && skeleton(c) === tw.skel.slice(0, c.length)) best = 1;
+    }
+  }
+  if (best) return best;
+  const thr = fuzzyThreshold(n, L);
+  if (thr > 0) for (const c of vars) {
+    if (levenshtein(c, tw.w, thr) <= thr) return 1;
+    if (c.length > n && levenshtein(c.slice(0, n), tw.w, thr) <= thr) return 1;
+  }
+  return 0;
+}
+
+/* Фраза из нескольких слов: каждое слово должно найтись в тексте. */
+function matchPhrase(words, toks, L) {
+  let lvl = 3; const hit = [];
+  for (const tw of words) {
+    let b = 0, bi = -1;
+    for (let i = 0; i < toks.length && b < 3; i++) { const m = matchToken(tw, toks[i].n, L); if (m > b) { b = m; bi = i; } }
+    if (!b) return { lvl: 0, hit: [] };
+    if (b < lvl) lvl = b;
+    hit.push(bi);
+  }
+  return { lvl, hit };
+}
+
+/* =====================================================================
+   4. ПЛЕЙСХОЛДЕРЫ
+   ===================================================================== */
+// 1 {{name}}  2 {name}/{0}/{}  3 %%  4 printf (5 — номер)  6 HTML-тег  7 литерал \n  8 реальный перевод строки
+const PH_SRC = String.raw`(\{\{\s*[\w.\-]+\s*\}\})|(\{[\w.\-]*\})|(%%)|(%(?:(\d+)\$)?[-+0#]*\d*(?:\.\d+)?(?:hh|h|ll|l|L|z|j|t)?[sdiufFeEgGxXoc@])|(<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>)|(\\[ntr])|(\n)`;
+const VOID_TAGS = new Set(['br', 'hr', 'img', 'input', 'wbr', 'meta', 'link']);
+
+function extractPlaceholders(text) {
+  const out = [], re = new RegExp(PH_SRC, 'g'); let m;
+  while ((m = re.exec(text))) {
+    const t = { raw: m[0], s: m.index, e: m.index + m[0].length, positional: false };
+    if (m[1]) { t.kind = 'var'; t.norm = m[1].replace(/\s+/g, ''); }
+    else if (m[2]) { t.kind = 'var'; t.norm = m[2]; t.positional = m[2] === '{}'; }
+    else if (m[3]) continue;
+    else if (m[4]) { t.kind = 'var'; t.norm = m[4]; t.positional = !m[5]; }
+    else if (m[6]) { const mm = /^<(\/?)([A-Za-z][A-Za-z0-9-]*)/.exec(m[6]); t.kind = 'tag'; t.name = mm[2].toLowerCase(); t.close = !!mm[1]; t.norm = '<' + mm[1] + t.name + '>'; }
+    else if (m[7]) { t.kind = 'nl'; t.norm = m[7]; }
+    else { t.kind = 'nl'; t.norm = '\\n'; }
+    out.push(t);
+  }
+  return out;
+}
+function maskPlaceholders(text) { return text.replace(new RegExp(PH_SRC, 'g'), m => ' '.repeat(m.length)); }
+function tagsBalanced(tokens) {
+  const st = [];
+  for (const t of tokens) {
+    if (t.kind !== 'tag' || VOID_TAGS.has(t.name) || /\/>$/.test(t.raw)) continue;
+    if (!t.close) st.push(t.name); else if (st.pop() !== t.name) return false;
+  }
+  return st.length === 0;
+}
+
+/* =====================================================================
+   5. ПРОВЕРКИ
+   Каждая проверка — объект в списке CHECKS:
+     { id, name, hint, scope: 'row' | 'all', run(row, ctx) → [находки] | run(rows, ctx) → [находки] }
+   Находка: { row, check, type, severity: 'critical'|'major'|'minor'|'info', message, hlSrc: [[s,e]], hlTgt: [[s,e]] }
+   Чтобы добавить проверку — допишите объект в массив.
+   ===================================================================== */
+const SEVERITY = { critical: 'Критично', major: 'Важно', minor: 'Незначительно', info: 'ОК' };
+const SEV_ORDER = { critical: 0, major: 1, minor: 2, info: 3 };
+const F = (row, type, severity, message, hlSrc, hlTgt) => ({ row, type, severity, message, hlSrc: hlSrc || [], hlTgt: hlTgt || [] });
+
+const PUNCT_CLASSES = { ellipsis: 'многоточие', period: 'точка', question: 'вопросительный знак', exclamation: 'восклицательный знак', comma: 'запятая', colon: 'двоеточие', semicolon: 'точка с запятой' };
+/* Общая таблица «знак → класс» по всем языкам конфига. */
+const UNIVERSAL_PUNCT = (() => {
+  const m = new Map();
+  for (const L of Object.values(LANGUAGES)) for (const cls of Object.keys(PUNCT_CLASSES)) for (const ch of L.punct[cls]) if (!m.has(ch)) m.set(ch, cls);
+  for (const [ch, cls] of [['.', 'period'], ['?', 'question'], ['!', 'exclamation'], [',', 'comma'], [':', 'colon'], [';', 'semicolon']]) m.set(ch, cls);
+  return [...m.entries()].sort((a, b) => b[0].length - a[0].length);
+})();
+function endPunct(text) {
+  let t = text, prev;
+  do { prev = t; t = t.replace(/\s+$/, '').replace(/<\/[A-Za-z][^<>]*>$/, '').replace(/["'»”’)\]）」』]$/, ''); } while (t !== prev);
+  for (const [str, cls] of UNIVERSAL_PUNCT) if (t.endsWith(str)) return { cls, str, s: t.length - str.length, e: t.length };
+  return { cls: null, str: '', s: t.length, e: t.length };
+}
+
+const CHECKS = [
+  /* ---------- Непереведённые строки ---------- */
+  { id: 'untranslated', name: 'Непереведённые строки', hint: 'Пустой перевод или перевод совпадает с исходником', scope: 'row',
+    run(row) {
+      if (!row.tgt.trim()) return [F(row, 'Пустой перевод', 'critical', 'Перевод отсутствует.')];
+      if (row.tgt.trim() === row.src.trim() && /[А-Яа-яЁё]/.test(row.src))
+        return [F(row, 'Совпадает с исходником', 'major', 'Перевод дословно совпадает с русским исходником.')];
+      return [];
+    } },
+
+  /* ---------- Переменные и плейсхолдеры ---------- */
+  { id: 'placeholders', name: 'Переменные и плейсхолдеры', hint: '{{name}}, {name}, %s, %d, %1$s, HTML-теги, \\n: потерянные, лишние, изменённый порядок', scope: 'row',
+    run(row) {
+      if (!row.tgt.trim()) return [];
+      const a = extractPlaceholders(row.src), b = extractPlaceholders(row.tgt), out = [];
+      if (!a.length && !b.length) return out;
+      const count = arr => { const m = new Map(); for (const t of arr) m.set(t.norm, (m.get(t.norm) || 0) + 1); return m; };
+      const ca = count(a), cb = count(b);
+      const sevOf = t => t.kind === 'var' ? 'critical' : t.kind === 'tag' ? 'major' : 'minor';
+      const worst = arr => arr.reduce((s, t) => SEV_ORDER[sevOf(t)] < SEV_ORDER[s] ? sevOf(t) : s, 'minor');
+      const diff = (arr, mine, other) => { const seen = new Map(), res = []; for (const t of arr) { const k = (seen.get(t.norm) || 0) + 1; seen.set(t.norm, k); if (k > (other.get(t.norm) || 0)) res.push(t); } return res; };
+      const show = arr => [...new Set(arr.map(t => t.norm))].join(', ');
+      const lost = diff(a, ca, cb), extra = diff(b, cb, ca);
+      if (lost.length) out.push(F(row, 'Потерян плейсхолдер', worst(lost), 'В переводе нет: ' + show(lost), lost.map(t => [t.s, t.e]), []));
+      if (extra.length) out.push(F(row, 'Лишний плейсхолдер', worst(extra), 'В исходнике нет: ' + show(extra), [], extra.map(t => [t.s, t.e])));
+      if (!lost.length && !extra.length) {
+        // порядок важен только для безымянных/ненумерованных (%s, %d, {}); именованные и %1$s переставлять можно
+        const pa = a.filter(t => t.positional), pb = b.filter(t => t.positional);
+        if (pa.map(t => t.norm).join('\u0001') !== pb.map(t => t.norm).join('\u0001'))
+          out.push(F(row, 'Изменён порядок переменных', 'critical', 'Позиционные переменные (' + show(pa) + ') стоят в другом порядке. Переставлять можно только именованные или нумерованные (%1$s).', pa.map(t => [t.s, t.e]), pb.map(t => [t.s, t.e])));
+        if (tagsBalanced(a) && !tagsBalanced(b))
+          out.push(F(row, 'Нарушена вложенность тегов', 'major', 'HTML-теги в переводе закрываются не в том порядке.', [], b.filter(t => t.kind === 'tag').map(t => [t.s, t.e])));
+      }
+      return out;
+    } },
+
+  /* ---------- Пробелы и пунктуация ---------- */
+  { id: 'punct', name: 'Пробелы и пунктуация', hint: 'Двойные пробелы, пробелы по краям и перед знаками, двойная и финальная пунктуация — по правилам языка', scope: 'row',
+    run(row) {
+      const s = row.src, t = row.tgt, L = row.L, PU = L.punct, out = [];
+      if (!t.trim()) return out;
+      const ranges = (re, str) => [...str.matchAll(re)].map(m => [m.index, m.index + m[0].length]);
+      // пробелы в начале / в конце
+      const lead = x => /^[ \t ]+/.exec(x), trail = x => /[ \t ]+$/.exec(x);
+      if (lead(t) && !lead(s)) out.push(F(row, 'Пробел в начале', 'minor', 'Перевод начинается с пробела, в исходнике его нет.', [], [[0, lead(t)[0].length]]));
+      if (!lead(t) && lead(s)) out.push(F(row, 'Пробел в начале', 'minor', 'В исходнике строка начинается с пробела, в переводе он потерян.', [[0, lead(s)[0].length]], []));
+      if (trail(t) && !trail(s)) out.push(F(row, 'Пробел в конце', 'minor', 'Перевод заканчивается пробелом, в исходнике его нет.', [], [[trail(t).index, t.length]]));
+      if (!trail(t) && trail(s)) out.push(F(row, 'Пробел в конце', 'minor', 'В исходнике строка заканчивается пробелом, в переводе он потерян.', [[trail(s).index, s.length]], []));
+      if (L.spaces !== false) {
+        const dbl = ranges(/(?<=\S)[  ]{2,}(?=\S)/g, t);
+        if (dbl.length) out.push(F(row, 'Двойной пробел', 'minor', 'Несколько пробелов подряд.', [], dbl));
+        if (PU.noSpaceBefore) {
+          const cls = '[' + reEsc(PU.noSpaceBefore) + ']';
+          const re = new RegExp('[ \\u00A0]+(?=' + cls + '(?:$|[\\s"»”)\\]]|' + cls + '))', 'gm');
+          const sp = ranges(re, t);
+          if (sp.length && !new RegExp(re.source, 'm').test(s)) out.push(F(row, 'Пробел перед знаком', 'minor', 'Пробел перед знаком препинания.', [], sp.map(([a, b]) => [a, b + 1])));
+        }
+      }
+      // двойная пунктуация
+      const pset = [...new Set([',', ';', ':', '!', '?', ...PU.period, ...PU.comma, ...PU.question, ...PU.exclamation, ...PU.colon, ...PU.semicolon].filter(c => c.length === 1 && c !== '.'))];
+      const dp = [];
+      for (const m of t.matchAll(new RegExp('([' + reEsc(pset.join('')) + '])\\1+|(?<!\\.)\\.\\.(?!\\.)|,\\.', 'g')))
+        if (!s.includes(m[0])) dp.push([m.index, m.index + m[0].length]);
+      if (dp.length) out.push(F(row, 'Двойная пунктуация', 'minor', 'Знак препинания повторяется или знаки стоят подряд.', [], dp));
+      // «чужие» знаки (обычная точка в армянском/амхарском, полуширинные знаки в китайском)
+      const FG = PU.foreign;
+      if (FG) {
+        const bad = [], seen = new Set();
+        for (let i = 0; i < t.length; i++) {
+          const ch = t[i]; if (!FG.chars.includes(ch)) continue;
+          const p = t[i - 1] || '', n = t[i + 1] || '';
+          const hit = FG.where === 'adjacent' ? (FG.script.test(p) || FG.script.test(n)) : (FG.script.test(p) && (n === '' || /[\s"»”)\]<]/.test(n)));
+          if (hit) { bad.push([i, i + 1]); seen.add(ch); }
+        }
+        if (bad.length) out.push(F(row, 'Знак не по правилам языка', 'major',
+          'Для языка «' + L.name + '» нужны свои знаки: ' + [...seen].map(c => '«' + c + '» → «' + (FG.hint[c] || '?') + '»').join(', ') + '.', [], bad));
+      }
+      // финальная пунктуация
+      const es = endPunct(s), et = endPunct(t);
+      const inW = es.cls && PU.inWord[es.cls];
+      if (inW && t.includes(inW)) return out;                       // знак стоит внутри слова (армянский) — это норма
+      if (es.cls !== et.cls) {
+        const nm = c => c ? PUNCT_CLASSES[c] : 'нет знака';
+        out.push(F(row, 'Финальная пунктуация', 'minor', 'В конце исходника — ' + nm(es.cls) + (es.str ? ' «' + es.str + '»' : '') + ', в конце перевода — ' + nm(et.cls) + (et.str ? ' «' + et.str + '»' : '') + '.', es.cls ? [[es.s, es.e]] : [], et.cls ? [[et.s, et.e]] : []));
+      } else if (et.cls && !PU[et.cls].includes(et.str) && !(FG && [...et.str].every(c => FG.chars.includes(c)))) {
+        out.push(F(row, 'Знак не по правилам языка', 'major', 'В конце перевода «' + et.str + '», для языка «' + L.name + '» ожидается «' + PU[et.cls][0] + '».', [], [[et.s, et.e]]));
+      }
+      return out;
+    } },
+
+  /* ---------- Длина ---------- */
+  { id: 'length', name: 'Длина перевода', hint: 'Отношение длины перевода к исходнику вне диапазона для языка', scope: 'row',
+    run(row, ctx) {
+      if (!row.tgt.trim()) return [];
+      const len = x => Array.from(x.replace(new RegExp(PH_SRC, 'g'), '').trim()).length;
+      const a = len(row.src), b = len(row.tgt);
+      if (a < ctx.settings.minLen || !b) return [];
+      const [lo, hi] = ctx.range(row.L), r = b / a;
+      if (r >= lo && r <= hi) return [];
+      return [F(row, r < lo ? 'Перевод слишком короткий' : 'Перевод слишком длинный', 'minor',
+        'Отношение длины ' + fmt(r) + ' (' + b + ' / ' + a + ' симв.), допустимо ' + fmt(lo) + '–' + fmt(hi) + '.')];
+    } },
+
+  /* ---------- Глоссарий ---------- */
+  { id: 'glossary', name: 'Соответствие глоссарию', hint: 'Термины ищутся с учётом морфологии: падежи, число, суффиксы, приставки', scope: 'row',
+    run(row, ctx) { return checkGlossary(row, ctx); } },
+
+  /* ---------- RTL ---------- */
+  { id: 'rtl', name: 'Целостность RTL', hint: 'Иврит и другие RTL-языки: плейсхолдеры и латиница не должны быть разорваны или перевёрнуты', scope: 'row',
+    run(row) {
+      const t = row.tgt, out = [];
+      if (row.L.dir !== 'rtl' || !t.trim()) return out;
+      const rs = re => [...t.matchAll(re)].map(m => [m.index, m.index + m[0].length]);
+      const mirrored = rs(/\}\}\s*[\w.\-]+\s*\{\{|\}[\w.\-]+\{|(?<![\w%])[sd@]\$\d%|(?<![\w%$])[sd@]%(?!\d*\$?[sd@])/g);
+      if (mirrored.length) out.push(F(row, 'Плейсхолдер перевёрнут', 'critical', 'Плейсхолдер записан зеркально (справа налево) — приложение его не подставит.', [], mirrored));
+      const broken = rs(/%\s+(?:\d+\s*\$\s*)?[sd@](?![A-Za-z])|%\d+\s+\$\s*[sd@]|%\d+\$\s+[sd@](?![A-Za-z])|\{\s+\{|\}\s+\}/g);
+      if (broken.length) out.push(F(row, 'Плейсхолдер разорван', 'critical', 'Внутри плейсхолдера появились пробелы.', [], broken));
+      const inv = rs(/[A-Za-z0-9%{$][​-‏‪-‮⁦-⁩]+(?=[A-Za-z0-9}$])/g);
+      if (inv.length) out.push(F(row, 'Невидимый символ внутри латиницы', 'major', 'Bidi-метка или символ нулевой ширины внутри плейсхолдера или латинского слова.', [], inv.map(([a, b]) => [a, b + 1])));
+      const cnt = re => (t.match(re) || []).length;
+      if (cnt(/[‪‫‭‮]/g) !== cnt(/‬/g) || cnt(/[⁦-⁨]/g) !== cnt(/⁩/g))
+        out.push(F(row, 'Незакрытая bidi-метка', 'major', 'Управляющие символы направления (LRE/RLE/LRI/RLI…) не закрыты парным PDF/PDI.'));
+      const low = t.toLowerCase(), rev = [];
+      for (const m of maskPlaceholders(row.src).matchAll(/[A-Za-z]{3,}/g)) {
+        const w = m[0].toLowerCase(), r = [...w].reverse().join('');
+        if (r !== w && !low.includes(w) && low.includes(r)) { const i = low.indexOf(r); rev.push([i, i + r.length]); }
+      }
+      if (rev.length) out.push(F(row, 'Латиница перевёрнута', 'critical', 'Латинское слово из исходника записано в обратном порядке букв.', [], rev));
+      return out;
+    } },
+
+  /* ---------- Консистентность ---------- */
+  { id: 'consistency', name: 'Консистентность', hint: 'Один и тот же исходник переведён по-разному (в т.ч. Android / iOS / Web)', scope: 'all',
+    run(rows) {
+      const groups = new Map(), out = [];
+      for (const r of rows) {
+        const s = r.src.trim(), t = r.tgt.trim(); if (!s || !t) continue;
+        const k = r.lang + '\u0001' + s; let g = groups.get(k);
+        if (!g) groups.set(k, g = new Map());
+        if (!g.has(t)) g.set(t, []); g.get(t).push(r);
+      }
+      for (const g of groups.values()) {
+        if (g.size < 2) continue;
+        const variants = [...g.entries()];
+        const plats = new Set(); for (const [, rs] of variants) for (const r of rs) plats.add(r.platform || '—');
+        for (const [t, rs] of variants) {
+          const others = variants.filter(v => v[0] !== t);
+          const desc = others.slice(0, 3).map(([ot, ors]) => '«' + cut(ot, 70) + '» (' + [ors[0].platform, ors[0].key].filter(Boolean).join(', ') + (ors.length > 1 ? ' и ещё ' + (ors.length - 1) : '') + ')').join('; ');
+          const msg = 'Тот же исходник переведён иначе: ' + desc + (others.length > 3 ? ' и ещё ' + (others.length - 3) + ' вар.' : '') + (plats.size > 1 ? '. Расхождение между платформами: ' + [...plats].join(' / ') + '.' : '');
+          for (const r of rs) out.push(F(r, plats.size > 1 ? 'Разный перевод на платформах' : 'Разный перевод одного исходника', 'major', msg));
+        }
+      }
+      return out;
+    } },
+];
+
+/* ---------- Глоссарий: индекс и проверка ---------- */
+function buildGlossaryIndex(gloss) {
+  const RU = prepLang(LANGUAGES[SOURCE_LANG]);
+  const index = new Map();
+  const put = (key, pat) => { if (!index.has(key)) index.set(key, []); index.get(key).push(pat); };
+  for (const term of gloss.terms) {
+    term._prep = {};
+    const mk = (text, need) => {
+      const words = tokenize(text, RU).map(t => prepTermWord(t.n, need === 3 ? Object.assign(Object.create(RU), { basic: true }) : RU));
+      if (!words.length) return;
+      const pat = { term, words, need };
+      for (const k of new Set((need === 3 ? [words[0].w] : words[0].stems).map(s => s.slice(0, 2)))) put(k, pat);
+    };
+    mk(term.ru, 2);
+    for (const f of term.forms) mk(f, 3);        // допустимые формы засчитываются и в исходнике
+  }
+  gloss.index = index;
+}
+
+function evalDNT(term, row, L) {
+  const names = (term.tr[L.code] && term.tr[L.code].length ? term.tr[L.code] : [term.ru]);
+  const t = row.tgt.replace(APOS_RE, "'");
+  let manual = null;
+  for (const name of names) {
+    const n = reEsc(name.replace(APOS_RE, "'"));
+    const tail = "(?:['\\-‑–][\\p{L}]+)?(?![\\p{L}\\p{N}])";
+    let m = new RegExp('(?<![\\p{L}\\p{N}])' + n + tail, 'u').exec(t);
+    if (m) return { status: 'found', alt: name, form: m[0], exact: m[0] === name, range: [m.index, m.index + m[0].length] };
+    m = new RegExp('(?<![\\p{L}\\p{N}])' + n + tail, 'iu').exec(t);
+    if (m) manual = manual || { status: 'manual', alt: name, form: m[0], range: [m.index, m.index + m[0].length], why: 'отличается регистр' };
+    m = new RegExp('(?<![\\p{L}\\p{N}])' + n + '\\p{L}{1,10}', 'iu').exec(t);
+    if (m) manual = manual || { status: 'manual', alt: name, form: m[0], range: [m.index, m.index + m[0].length], why: 'суффикс присоединён без апострофа или дефиса' };
+  }
+  return manual || { status: 'missing', alt: names[0] };
+}
+
+function evalTerm(term, row, L, cache) {
+  if (term.dnt) return evalDNT(term, row, L);
+  const alts = term.tr[L.code];
+  if (!alts || !alts.length) return null;
+  prepLang(L);
+  const noSpace = L.spaces === false;
+  if (!cache.toks) { cache.toks = tokenize(row.tgt, L); cache.norm = normalizeText(maskPlaceholders(row.tgt), L); }
+  const sameLen = cache.norm.length === row.tgt.length;
+  let prep = term._prep[L.code];
+  if (!prep) prep = term._prep[L.code] = {
+    alts: alts.map(a => ({ raw: a, norm: normalizeText(a, L).replace(/\s+/g, noSpace ? '' : ' ').trim(), words: tokenize(a, L).map(t => prepTermWord(t.n, L)) })),
+    forms: term.forms.map(f => ({ raw: f, norm: normalizeText(f, L).trim(), words: tokenize(f, L).map(t => t.n) })),
+  };
+  const span = hit => { const xs = hit.map(i => cache.toks[i]); return [Math.min(...xs.map(x => x.s)), Math.max(...xs.map(x => x.e))]; };
+  // допустимые формы
+  for (const f of prep.forms) {
+    if (!f.norm) continue;
+    if (noSpace) { const i = cache.norm.indexOf(f.norm); if (i >= 0) return { status: 'found', alt: alts[0], form: f.raw, allowed: true, range: sameLen ? [i, i + f.norm.length] : null }; continue; }
+    const hit = f.words.map(w => cache.toks.findIndex(t => t.n === w));
+    if (f.words.length && hit.every(i => i >= 0)) return { status: 'found', alt: alts[0], form: f.raw, allowed: true, range: span(hit) };
+  }
+  let best = null;
+  for (const a of prep.alts) {
+    let r;
+    if (noSpace) {                                   // без пробелов и морфологии — поиск подстроки
+      const hay = cache.norm.replace(/\s+/g, '') === cache.norm ? cache.norm : cache.norm, i = hay.indexOf(a.norm);
+      if (i >= 0) r = { lvl: 3, range: sameLen ? [i, i + a.norm.length] : null, form: a.raw };
+      else if (a.norm.length >= 3 && (hay.includes(a.norm.slice(1)) || hay.includes(a.norm.slice(0, -1)))) {
+        const part = hay.includes(a.norm.slice(1)) ? a.norm.slice(1) : a.norm.slice(0, -1), j = hay.indexOf(part);
+        r = { lvl: 1, range: sameLen ? [j, j + part.length] : null, form: part };
+      } else r = { lvl: 0 };
+    } else {
+      if (!a.words.length) continue;
+      const m = matchPhrase(a.words, cache.toks, L);
+      r = { lvl: m.lvl };
+      if (m.lvl) { r.range = span(m.hit); r.form = m.hit.map(i => row.tgt.slice(cache.toks[i].s, cache.toks[i].e)).join(' '); }
+    }
+    r.alt = a.raw;
+    if (!best || r.lvl > best.lvl) best = r;
+    if (best.lvl === 3) break;
+  }
+  if (!best) return null;
+  if (best.lvl >= 2) return { status: 'found', alt: best.alt, form: best.form, exact: best.lvl === 3, range: best.range };
+  if (best.lvl === 1) return { status: 'manual', alt: best.alt, form: best.form, range: best.range };
+  return { status: 'missing', alt: best.alt };
+}
+
+function checkGlossary(row, ctx) {
+  const G = ctx.gloss, out = [];
+  if (!G || !G.terms.length || !row.tgt.trim()) return out;
+  const RU = LANGUAGES[SOURCE_LANG], L = row.L;
+  const st = tokenize(row.src, RU), hits = new Map();
+  // шаг 1: термин должен быть в русском исходнике (с учётом падежей)
+  for (let i = 0; i < st.length; i++) {
+    const bucket = G.index.get(st[i].n.slice(0, 2)); if (!bucket) continue;
+    for (const p of bucket) {
+      if (hits.has(p.term)) continue;
+      let ok = true;
+      for (let k = 0; k < p.words.length; k++) { const t = st[i + k]; if (!t || matchToken(p.words[k], t.n, RU) < p.need) { ok = false; break; } }
+      if (ok) hits.set(p.term, [st[i].s, st[i + p.words.length - 1].e]);
+    }
+  }
+  if (!hits.size) return out;
+  // шаг 2: ищем термин в переводе
+  const cache = {};
+  for (const [term, sr] of hits) {
+    const r = evalTerm(term, row, L, cache);
+    if (!r) continue;
+    const pair = '«' + term.ru + '» → «' + r.alt + '»', tr = r.range ? [r.range] : [];
+    const dnt = term.dnt ? ' (не переводится)' : '';
+    if (r.status === 'found')
+      out.push(F(row, 'Найдено', 'info', pair + dnt + ': ' + (r.allowed ? 'допустимая форма «' + r.form + '»' : r.exact ? 'точное совпадение' : 'найдено в форме «' + r.form + '»') + '.', [sr], tr));
+    else if (r.status === 'manual')
+      out.push(F(row, 'Проверить вручную', 'minor', pair + dnt + ': найдено похожее «' + r.form + '»' + (r.why ? ' — ' + r.why : '') + '. Уверенности нет, проверьте вручную.', [sr], tr));
+    else
+      out.push(F(row, term.dnt ? 'Название изменено или отсутствует' : 'Термин не найден', 'major',
+        term.dnt ? pair + ': название не переводится и должно стоять в тексте как есть (допустим суффикс через апостроф или дефис).' : pair + ': термин из глоссария не найден в переводе.', [sr], []));
+  }
+  return out;
+}
+
+/* =====================================================================
+   6. ЭТАПЫ ПРОВЕРКИ
+   Сейчас работает один этап — автопроверки по правилам.
+   Этап 'ai' — зарезервированное место под будущее ИИ-ревью строк, прошедших автопроверки:
+   включите enabled и реализуйте run(cleanRows, ctx) → Promise<находки>. В него попадут
+   только строки без находок (result.cleanRows).
+   ===================================================================== */
+const STAGES = [
+  { id: 'rules', title: 'Автопроверки по правилам', enabled: true,
+    async run(rows, ctx, onProgress, alive) {
+      const active = CHECKS.filter(c => ctx.settings.checks[c.id] !== false), out = [];
+      const rowChecks = active.filter(c => c.scope === 'row');
+      for (let i = 0; i < rows.length; i++) {
+        for (const c of rowChecks) for (const f of c.run(rows[i], ctx)) { f.check = c.id; out.push(f); }
+        if (i % 400 === 399) { onProgress(i / rows.length); await new Promise(r => setTimeout(r)); if (!alive()) return null; }
+      }
+      for (const c of active.filter(c => c.scope === 'all')) for (const f of c.run(rows, ctx)) { f.check = c.id; out.push(f); }
+      return out;
+    } },
+  { id: 'ai', title: 'ИИ-ревью (будущий этап)', enabled: false,
+    async run(cleanRows, ctx) { return []; } },
+];
+
+/* =====================================================================
+   7. РАЗБОР ФАЙЛОВ
+   ===================================================================== */
+function parseDelimited(text, delim) {
+  text = text.replace(/^﻿/, '');
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') {
+        const n = text[i + 1];
+        if (n === '"') { cell += '"'; i++; }
+        else if (n === undefined || n === delim || n === '\n' || n === '\r') q = false;
+        else { cell = '"' + cell + '"'; q = false; }           // кавычка была частью текста, а не обрамлением
+      } else cell += ch;
+    } else if (ch === '"' && cell === '') q = true;
+    else if (ch === delim) { row.push(cell); cell = ''; }
+    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (ch !== '\r') cell += ch;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim() !== ''));
+}
+function sniffDelimiter(text) {
+  const line = text.split(/\r?\n/, 1)[0];
+  const n = d => line.split(d).length - 1;
+  return n('\t') ? '\t' : n(';') > n(',') ? ';' : ',';
+}
+
+async function readTableFile(file) {
+  if (/\.(csv|tsv|txt)$/i.test(file.name)) {
+    const text = new TextDecoder('utf-8').decode(await file.arrayBuffer());
+    return [{ name: file.name, rows: parseDelimited(text, sniffDelimiter(text)) }];
+  }
+  if (!window.XLSX) throw new Error('Библиотека для чтения Excel (SheetJS) не загрузилась — проверьте доступ к cdn.sheetjs.com или сохраните файл как CSV.');
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  return wb.SheetNames.map(n => ({ name: n, rows: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: false, blankrows: false }).map(r => r.map(c => String(c ?? ''))) }));
+}
+
+/* Язык и платформа по имени файла / заголовку. */
+function detectLang(name) {
+  const tokens = String(name).toLowerCase().replace(/\.[a-z0-9]+$/, '').split(/[^a-zа-яё]+/).filter(Boolean).reverse();
+  for (const t of tokens) for (const L of Object.values(LANGUAGES)) if (L.aliases.includes(t) || (t.length >= 5 && L.name.toLowerCase().startsWith(t.slice(0, 5)))) return L.code;
+  return '';
+}
+function detectPlatform(name) {
+  const n = String(name).toLowerCase();
+  if (/android|andr|google/.test(n)) return 'Android';
+  if (/ios|iphone|ipad|apple/.test(n)) return 'iOS';
+  if (/web|site|front|desktop/.test(n)) return 'Web';
+  return '';
+}
+
+/* ---------- .po ---------- */
+function poUnquote(s) {
+  return s.slice(1, -1).replace(/\\(.)/g, (m, c) => c === 'n' ? '\n' : c === 't' ? '\t' : c === 'r' ? '\r' : c);
+}
+function parsePO(text) {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const entries = []; let cur = null, field = null;
+  const start = () => { cur = { lines: [], msgctxt: null, msgid: null, plural: null, msgstr: [], refs: [], obsolete: false }; entries.push(cur); field = null; };
+  for (const line of text.replace(/^﻿/, '').split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) { cur = null; continue; }
+    if (!cur) start();
+    if (t.startsWith('#~')) { cur.obsolete = true; cur.lines.push(line); continue; }
+    if (t[0] === '#') {
+      if (cur.msgstr.length) start();
+      if (t.startsWith('#:')) cur.refs.push(t.slice(2).trim());
+      cur.lines.push(line); field = null; continue;
+    }
+    const m = /^(msgctxt|msgid_plural|msgid|msgstr)(?:\[(\d+)\])?\s*(".*")$/.exec(t);
+    if (m) {
+      if ((m[1] === 'msgid' || m[1] === 'msgctxt') && (cur.msgid !== null || (m[1] === 'msgctxt' && cur.msgctxt !== null))) start();
+      const v = poUnquote(m[3]);
+      if (m[1] === 'msgctxt') { cur.msgctxt = v; field = 'msgctxt'; }
+      else if (m[1] === 'msgid') { cur.msgid = v; field = 'msgid'; }
+      else if (m[1] === 'msgid_plural') { cur.plural = v; field = 'plural'; }
+      else { const i = +(m[2] || 0); cur.msgstr[i] = v; field = i; }
+    } else if (t[0] === '"' && field !== null) {
+      const v = poUnquote(t);
+      if (typeof field === 'number') cur.msgstr[field] += v; else cur[field] += v;
+    }
+    cur.lines.push(line);
+  }
+  let lang = '';
+  const head = entries.find(e => e.msgid === '' && !e.obsolete);
+  if (head) { const m = /^Language:\s*([A-Za-z]{2,3})/m.exec(head.msgstr[0] || ''); if (m) lang = m[1].toLowerCase(); }
+  return { entries, eol, lang };
+}
+function poRows(po) {
+  const rows = []; let n = 0;
+  for (const e of po.entries) {
+    if (e.obsolete || e.msgid === null || e.msgid === '') continue;
+    n++;
+    const key = e.msgctxt || e.refs[0] || '#' + n;
+    if (e.plural !== null) (e.msgstr.length ? e.msgstr : ['']).forEach((s, i) => rows.push({ key: key + ' [' + i + ']', src: i === 0 ? e.msgid : e.plural, tgt: s || '', entry: e }));
+    else rows.push({ key, src: e.msgid, tgt: e.msgstr[0] || '', entry: e });
+  }
+  return rows;
+}
+/* .po с пометками: fuzzy + «#. QA: …». Текст msgid/msgstr не трогаем — строки файла переносятся как есть. */
+function annotatePO(ds, findings) {
+  const byEntry = new Map();
+  for (const f of findings) {
+    if (f.severity === 'info' || f.row.ds !== ds || !f.row.entry) continue;
+    if (!byEntry.has(f.row.entry)) byEntry.set(f.row.entry, []);
+    byEntry.get(f.row.entry).push(f);
+  }
+  const blocks = ds.po.entries.map(e => {
+    const fs = byEntry.get(e);
+    if (!fs) return e.lines.join(ds.po.eol);
+    const lines = e.lines.filter(l => !/^#\.\s*QA:/.test(l.trim()));
+    const notes = [...new Set(fs.map(f => '#. QA: [' + SEVERITY[f.severity] + '] ' + checkName(f.check) + ' — ' + f.type + ': ' + f.message.replace(/\s+/g, ' ')))];
+    let at = 0;
+    for (let i = 0; i < lines.length; i++) { const t = lines[i].trim(); if (t === '#' || t.startsWith('# ') || t.startsWith('#.')) at = i + 1; else if (t[0] !== '#') break; }
+    lines.splice(at, 0, ...notes);
+    const fi = lines.findIndex(l => l.trim().startsWith('#,'));
+    if (fi >= 0) { if (!/\bfuzzy\b/.test(lines[fi])) lines[fi] = lines[fi].replace(/#,\s*/, '#, fuzzy, '); }
+    else { let i = lines.findIndex(l => { const t = l.trim(); return t.startsWith('#|') || t[0] !== '#'; }); if (i < 0) i = lines.length; lines.splice(i, 0, '#, fuzzy'); }
+    return lines.join(ds.po.eol);
+  });
+  return blocks.join(ds.po.eol + ds.po.eol) + ds.po.eol;
+}
+
+/* =====================================================================
+   8. СОСТОЯНИЕ И ИНТЕРФЕЙС
+   ===================================================================== */
+const DEFAULT_SETTINGS = () => ({ checks: Object.fromEntries(CHECKS.map(c => [c.id, true])), ranges: {}, minLen: 10 });
+const state = {
+  datasets: [],            // { id, name, kind: 'paste'|'sheet'|'po', platform, lang, rows: [{key, src, tgt, entry?}], po? }
+  glossary: null,          // { name, terms: [{ru, tr: {code: [варианты]}, forms: [], dnt}], langs: [] }
+  settings: DEFAULT_SETTINGS(),
+  result: null,            // { rows, findings, cleanRows }
+  filter: { type: '', sev: '', platform: '', lang: '', q: '', info: false, page: 0, size: 100 },
+  seq: 0, runId: 0,
+};
+try { const s = JSON.parse(localStorage.getItem('lqaDesk.settings') || 'null'); if (s) { Object.assign(state.settings.checks, s.checks || {}); state.settings.ranges = s.ranges || {}; if (s.minLen >= 0) state.settings.minLen = s.minLen; } } catch (e) {}
+const saveSettings = () => { try { localStorage.setItem('lqaDesk.settings', JSON.stringify(state.settings)); } catch (e) {} };
+const rangeFor = L => state.settings.ranges[L.code] || L.lengthRatio;
+const checkName = id => (CHECKS.find(c => c.id === id) || {}).name || id;
+
+const langOptions = sel => '<option value="">— язык —</option>' + targetLangs().map(l => `<option value="${l.code}"${l.code === sel ? ' selected' : ''}>${esc(l.name)}${l.basic ? '' : ' (' + l.code + ')'}</option>`).join('');
+const platformOptions = sel => '<option value="">— платформа —</option>' + PLATFORMS.map(p => `<option${p === sel ? ' selected' : ''}>${p}</option>`).join('');
+
+function addDataset(d) {
+  d.id = ++state.seq;
+  d.rows = d.rows.filter(r => r.src.trim() || r.tgt.trim());
+  state.datasets.push(d); renderDatasets(); scheduleRun();
+}
+
+function renderDatasets() {
+  const el = $('datasets');
+  if (!state.datasets.length) { el.innerHTML = '<div class="hint" style="margin-top:8px">Данные пока не загружены.</div>'; }
+  else el.innerHTML = '<table class="simple"><thead><tr><th>Набор</th><th>Тип</th><th>Строк</th><th>Платформа</th><th>Язык перевода</th><th></th></tr></thead><tbody>' +
+    state.datasets.map(d => `<tr data-id="${d.id}"><td>${esc(d.name)}</td><td><span class="tag">${{ paste: 'вставка', sheet: 'таблица', po: '.po' }[d.kind]}</span></td><td>${d.rows.length}</td>
+      <td><select data-act="platform">${platformOptions(d.platform)}</select></td>
+      <td><select data-act="lang"${d.lang ? '' : ' style="border-color:var(--crit)"'}>${langOptions(d.lang)}</select></td>
+      <td style="text-align:right">${d.kind === 'po' ? '<button class="btn small" data-act="po">Скачать .po с пометками</button> ' : ''}<button class="btn small" data-act="del">Удалить</button></td></tr>`).join('') + '</tbody></table>';
+  const g = state.glossary;
+  $('glossInfo').innerHTML = g
+    ? `<span><b>Глоссарий:</b> ${esc(g.name)} — терминов: ${g.terms.length}, из них «не переводится»: ${g.terms.filter(t => t.dnt).length}; языки: ${g.langs.map(c => esc(getLang(c).name)).join(', ') || '—'}</span><span class="spacer"></span><button class="btn small" id="glossDel">Убрать глоссарий</button>`
+    : '<span class="hint">Глоссарий не загружен — проверка терминов пропускается. Загрузите его на вкладке «Глоссарий».</span>';
+  $('btnPoAll').hidden = !state.datasets.some(d => d.kind === 'po');
+}
+
+$('datasets').addEventListener('change', e => {
+  const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+  const d = state.datasets.find(x => x.id === +tr.dataset.id);
+  d[e.target.dataset.act] = e.target.value; renderDatasets(); scheduleRun();
+});
+$('datasets').addEventListener('click', e => {
+  const act = e.target.dataset.act, tr = e.target.closest('tr[data-id]'); if (!tr || !act) return;
+  const d = state.datasets.find(x => x.id === +tr.dataset.id);
+  if (act === 'del') { state.datasets = state.datasets.filter(x => x !== d); renderDatasets(); scheduleRun(); }
+  if (act === 'po') downloadPO([d]);
+});
+$('glossInfo').addEventListener('click', e => { if (e.target.id === 'glossDel') { state.glossary = null; renderDatasets(); scheduleRun(); } });
+
+/* ---------- вкладки ---------- */
+$('tabs').addEventListener('click', e => {
+  const t = e.target.dataset.tab; if (!t) return;
+  for (const b of $('tabs').children) b.classList.toggle('on', b === e.target);
+  for (const p of document.querySelectorAll('.pane')) p.classList.toggle('on', p.id === 'pane-' + t);
+});
+$('pasteLang').innerHTML = langOptions('');
+$('pastePlatform').innerHTML = platformOptions('');
+
+/* ---------- вставка текста ---------- */
+let pasteN = 0;
+$('btnPaste').onclick = () => {
+  const text = $('pasteArea').value;
+  if (!text.trim()) return alert('Вставьте текст в поле.');
+  if (!$('pasteLang').value) return alert('Выберите язык перевода.');
+  let rows = parseDelimited(text, '\t');
+  if (rows.length && rows[0].every(c => /^(key|ключ|id|source|исходник|исходный текст|перевод|target|translation|русский)$/i.test(c.trim()))) rows = rows.slice(1);
+  const cols = Math.max(...rows.map(r => r.length));
+  if (cols < 2) return alert('Не удалось найти колонки. Ожидается: ключ ⇥ исходник ⇥ перевод, разделитель — табуляция.');
+  addDataset({ name: 'Вставка ' + (++pasteN), kind: 'paste', lang: $('pasteLang').value, platform: $('pastePlatform').value,
+    rows: rows.map((r, i) => cols >= 3 ? { key: r[0] || '', src: r[1] || '', tgt: r[2] || '' } : { key: String(i + 1), src: r[0] || '', tgt: r[1] || '' }) });
+  $('pasteArea').value = '';
+};
+
+/* ---------- .po ---------- */
+$('filePo').onchange = async e => {
+  for (const file of e.target.files) {
+    try {
+      const po = parsePO(new TextDecoder('utf-8').decode(await file.arrayBuffer()));
+      const lang = LANGUAGES[po.lang] && !LANGUAGES[po.lang].source ? po.lang : (detectLang(file.name) || (po.lang && po.lang !== SOURCE_LANG ? 'xx' : ''));
+      const d = { name: file.name, kind: 'po', lang: lang === SOURCE_LANG ? '' : lang, platform: detectPlatform(file.name), po, rows: poRows(po) };
+      addDataset(d);
+    } catch (err) { alert('Не удалось прочитать ' + file.name + ': ' + err.message); }
+  }
+  e.target.value = '';
+};
+function download(name, content, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type: type || 'text/plain;charset=utf-8' }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function downloadPO(list) {
+  if (!state.result) return alert('Сначала запустите проверку.');
+  list.forEach((d, i) => setTimeout(() => download(d.name.replace(/\.pot?$/i, '') + '.qa.po', annotatePO(d, state.result.findings), 'text/x-gettext-translation;charset=utf-8'), i * 400));
+}
+$('btnPoAll').onclick = () => downloadPO(state.datasets.filter(d => d.kind === 'po'));
+
+/* ---------- Excel / CSV и глоссарий: диалог выбора колонок ---------- */
+let mapCtx = null, sheetQueue = [];
+$('fileSheet').onchange = e => { sheetQueue.push(...[...e.target.files].map(f => ({ file: f, mode: 'data' }))); e.target.value = ''; nextSheet(); };
+$('fileGloss').onchange = e => { if (e.target.files[0]) sheetQueue.push({ file: e.target.files[0], mode: 'gloss' }); e.target.value = ''; nextSheet(); };
+async function nextSheet() {
+  if ($('dlgMap').open || !sheetQueue.length) return;
+  const { file, mode } = sheetQueue.shift();
+  try {
+    const sheets = (await readTableFile(file)).filter(s => s.rows.length);
+    if (!sheets.length) throw new Error('файл пуст');
+    mapCtx = { file, mode, sheets, sheet: 0, header: true };
+    renderMap(true); $('dlgMap').showModal();
+  } catch (err) { alert('Не удалось прочитать ' + file.name + ': ' + err.message); nextSheet(); }
+}
+function renderMap(guess) {
+  const c = mapCtx, rows = c.sheets[c.sheet].rows, ncol = Math.max(...rows.slice(0, 200).map(r => r.length));
+  const head = Array.from({ length: ncol }, (_, i) => c.header ? (rows[0][i] || '').trim() || 'Колонка ' + (i + 1) : 'Колонка ' + (i + 1));
+  const find = re => head.findIndex(h => re.test(h));
+  const colSel = (id, label, val, none) => `<label class="f">${label}<select id="${id}">${none ? '<option value="-1">— нет —</option>' : ''}${head.map((h, i) => `<option value="${i}"${i === val ? ' selected' : ''}>${String.fromCharCode(65 + i % 26)}: ${esc(cut(h, 30))}</option>`).join('')}</select></label>`;
+  $('mapTitle').textContent = (c.mode === 'gloss' ? 'Глоссарий: ' : 'Колонки: ') + c.file.name;
+  let html = '<div class="grid">';
+  if (c.sheets.length > 1) html += `<label class="f">Лист<select id="mSheet">${c.sheets.map((s, i) => `<option value="${i}"${i === c.sheet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>`;
+  html += `<label class="f">Заголовки<select id="mHeader"><option value="1"${c.header ? ' selected' : ''}>Первая строка — заголовки</option><option value="0"${c.header ? '' : ' selected'}>Заголовков нет</option></select></label>`;
+  if (c.mode === 'data') {
+    if (guess) {
+      let k = find(/key|ключ|^id$|идентиф/i), s = find(/source|исходн|русск|^ru$|оригинал/i), t = find(/target|перевод|translation/i);
+      let lang = detectLang(c.file.name);
+      if (t < 0) t = head.findIndex((h, i) => i !== s && i !== k && detectLang(h) && detectLang(h) !== SOURCE_LANG);
+      if (t >= 0 && detectLang(head[t]) && detectLang(head[t]) !== SOURCE_LANG) lang = detectLang(head[t]);
+      if (s < 0) s = ncol >= 3 ? 1 : 0;
+      if (t < 0) t = Math.min(ncol - 1, s + 1);
+      if (k < 0 && ncol >= 3 && s > 0) k = 0;
+      c.sel = { k, s, t, lang: lang === SOURCE_LANG ? '' : lang, platform: detectPlatform(c.file.name) };
+    }
+    html += colSel('mKey', 'Ключ', c.sel.k, true) + colSel('mSrc', 'Исходник (русский)', c.sel.s) + colSel('mTgt', 'Перевод', c.sel.t)
+      + `<label class="f">Язык перевода<select id="mLang">${langOptions(c.sel.lang)}</select></label><label class="f">Платформа<select id="mPlatform">${platformOptions(c.sel.platform)}</select></label></div>`;
+  } else {
+    if (guess) {
+      let ru = find(/^(ru|rus)$|русск|термин|исходн|source|^term/i); if (ru < 0) ru = 0;
+      const forms = find(/допустим|формы|forms|variants/i), dnt = find(/не\s*перевод|dnt|do not translate|untranslat/i);
+      c.sel = { ru, forms, dnt, langs: head.map((h, i) => (i === ru || i === forms || i === dnt) ? '' : (detectLang(h) === SOURCE_LANG ? '' : detectLang(h))) };
+    }
+    html += colSel('mRu', 'Термин на русском', c.sel.ru) + colSel('mForms', '«Допустимые формы»', c.sel.forms, true) + colSel('mDnt', '«Не переводится»', c.sel.dnt, true) + '</div>';
+    html += '<div style="margin-top:12px;font-weight:500">Колонки с переводами терминов</div><div class="grid" style="margin-top:6px">' +
+      head.map((h, i) => `<label class="f">${String.fromCharCode(65 + i % 26)}: ${esc(cut(h, 28))}<select data-lcol="${i}"><option value="">— не использовать —</option>${targetLangs().map(l => `<option value="${l.code}"${c.sel.langs[i] === l.code ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>`).join('') + '</div>';
+  }
+  html += '<div class="preview"><table><thead><tr>' + head.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.slice(c.header ? 1 : 0, (c.header ? 1 : 0) + 5).map(r => '<tr>' + head.map((_, i) => '<td>' + esc(r[i] || '') + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
+  html += `<div class="hint" style="margin-top:6px">Строк в листе: ${rows.length - (c.header ? 1 : 0)}</div>`;
+  $('mapBody').innerHTML = html;
+}
+$('mapBody').addEventListener('change', e => {
+  if (e.target.id === 'mSheet') { mapCtx.sheet = +e.target.value; renderMap(true); }
+  if (e.target.id === 'mHeader') { mapCtx.header = e.target.value === '1'; renderMap(true); }
+});
+$('mapCancel').onclick = () => { $('dlgMap').close(); nextSheet(); };
+$('mapOk').onclick = () => {
+  const c = mapCtx, rows = c.sheets[c.sheet].rows.slice(c.header ? 1 : 0), v = id => +$(id).value;
+  if (c.mode === 'data') {
+    const k = v('mKey'), s = v('mSrc'), t = v('mTgt');
+    if (s === t) return alert('Исходник и перевод — одна и та же колонка.');
+    if (!$('mLang').value) return alert('Выберите язык перевода.');
+    addDataset({ name: c.file.name + (c.sheets.length > 1 ? ' · ' + c.sheets[c.sheet].name : ''), kind: 'sheet', lang: $('mLang').value, platform: $('mPlatform').value,
+      rows: rows.map((r, i) => ({ key: k >= 0 ? (r[k] || '') : String(i + 1), src: r[s] || '', tgt: r[t] || '' })) });
+  } else {
+    const ru = v('mRu'), fc = v('mForms'), dc = v('mDnt');
+    const cols = [...$('mapBody').querySelectorAll('[data-lcol]')].map(el => ({ i: +el.dataset.lcol, code: el.value })).filter(x => x.code && x.i !== ru && x.i !== fc && x.i !== dc);
+    const split = s => String(s || '').split(/[;|\n]/).map(x => x.trim()).filter(Boolean);
+    const terms = [];
+    for (const r of rows) {
+      const name = (r[ru] || '').trim(); if (!name) continue;
+      const term = { ru: name, tr: {}, forms: fc >= 0 ? split(r[fc]) : [], dnt: dc >= 0 && /^(1|да|yes|y|true|x|х|\+|✓|dnt)$/i.test((r[dc] || '').trim()) };
+      for (const col of cols) { const a = split(r[col.i]); if (a.length) term.tr[col.code] = (term.tr[col.code] || []).concat(a); }
+      terms.push(term);
+    }
+    if (!terms.length) return alert('В выбранной колонке нет терминов.');
+    setGlossary({ name: c.file.name, terms, langs: [...new Set(cols.map(x => x.code))] });
+  }
+  $('dlgMap').close(); nextSheet();
+};
+function setGlossary(g) { state.glossary = g; buildGlossaryIndex(g); renderDatasets(); scheduleRun(); }
+
+/* ---------- переключатели проверок ---------- */
+function renderToggles() {
+  $('checkToggles').innerHTML = CHECKS.map(c => `<label class="chk" title="${esc(c.hint)}"><input type="checkbox" data-check="${c.id}"${state.settings.checks[c.id] !== false ? ' checked' : ''}>${esc(c.name)}</label>`).join('');
+}
+$('checkToggles').addEventListener('change', e => { state.settings.checks[e.target.dataset.check] = e.target.checked; saveSettings(); scheduleRun(); });
+$('btnRun').onclick = () => runChecks();
+
+/* ---------- запуск ---------- */
+let runTimer = 0;
+function scheduleRun() { clearTimeout(runTimer); runTimer = setTimeout(runChecks, 120); }
+async function runChecks() {
+  const id = ++state.runId, alive = () => id === state.runId;
+  const rows = []; let rid = 0;
+  for (const d of state.datasets) {
+    if (!d.lang) continue;
+    const L = prepLang(getLang(d.lang));
+    for (const r of d.rows) { r.id = rid++; r.ds = d; r.L = L; r.lang = d.lang; r.platform = d.platform; r.file = d.name; rows.push(r); }
+  }
+  const skipped = state.datasets.filter(d => !d.lang).length;
+  if (!rows.length) { state.result = null; $('secResults').hidden = true; $('progress').textContent = skipped ? 'Укажите язык перевода у загруженных наборов.' : ''; return; }
+  const ctx = { settings: state.settings, gloss: state.glossary, range: rangeFor };
+  const t0 = performance.now();
+  $('progress').textContent = 'Проверка…';
+  let findings = [];
+  for (const stage of STAGES) {
+    if (!stage.enabled) continue;
+    const flagged = new Set(findings.filter(f => f.severity !== 'info').map(f => f.row));
+    const input = stage.id === 'rules' ? rows : rows.filter(r => !flagged.has(r));
+    const res = await stage.run(input, ctx, p => { $('progress').textContent = 'Проверка… ' + Math.round(p * 100) + '%'; }, alive);
+    if (!alive() || !res) return;
+    findings = findings.concat(res);
+  }
+  findings.sort((a, b) => a.row.id - b.row.id || SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
+  const flagged = new Set(findings.filter(f => f.severity !== 'info').map(f => f.row));
+  state.result = { rows, findings, cleanRows: rows.filter(r => !flagged.has(r)) };
+  $('progress').textContent = 'Готово за ' + Math.round(performance.now() - t0) + ' мс.' + (skipped ? ' Наборов без языка пропущено: ' + skipped + '.' : '');
+  state.filter.page = 0;
+  renderResults();
+}
+
+/* ---------- результаты ---------- */
+function renderResults() {
+  const R = state.result; if (!R) return;
+  $('secResults').hidden = false;
+  const real = R.findings.filter(f => f.severity !== 'info');
+  const by = sev => real.filter(f => f.severity === sev).length;
+  const langs = [...new Set(R.rows.map(r => r.lang))], plats = [...new Set(R.rows.map(r => r.platform))];
+  $('stats').innerHTML = [
+    [R.rows.length, 'строк проверено'], [real.length, 'находок всего'],
+    [by('critical'), '<span class="sev critical">Критично</span>'], [by('major'), '<span class="sev major">Важно</span>'], [by('minor'), '<span class="sev minor">Незначительно</span>'],
+    [R.cleanRows.length, 'строк без находок'], [R.findings.length - real.length, 'совпадений с глоссарием'],
+  ].map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('');
+  // матрица «тип × язык»
+  const m = new Map();
+  for (const f of real) { const k = f.check + '|' + f.row.lang; m.set(k, (m.get(k) || 0) + 1); }
+  const used = CHECKS.filter(c => real.some(f => f.check === c.id));
+  $('matrix').innerHTML = used.length ? '<table><thead><tr><th>Тип проблемы</th>' + langs.map(l => '<th>' + esc(getLang(l).name) + '</th>').join('') + '<th>Всего</th></tr></thead><tbody>' +
+    used.map(c => '<tr><td>' + esc(c.name) + '</td>' + langs.map(l => { const n = m.get(c.id + '|' + l) || 0; return n ? `<td class="n" data-type="${c.id}" data-lang="${l}">${n}</td>` : '<td class="z">0</td>'; }).join('') +
+      `<td class="n" data-type="${c.id}" data-lang=""><b>${real.filter(f => f.check === c.id).length}</b></td></tr>`).join('') +
+    '<tr><td><b>Всего</b></td>' + langs.map(l => `<td class="n" data-type="" data-lang="${l}"><b>${real.filter(f => f.row.lang === l).length}</b></td>`).join('') + `<td><b>${real.length}</b></td></tr></tbody></table>`
+    : '<div class="hint">Находок нет.</div>';
+  // фильтры
+  const fl = state.filter, opt = (v, t, cur) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`;
+  $('fType').innerHTML = opt('', 'Все типы проблем', fl.type) + CHECKS.map(c => opt(c.id, c.name, fl.type)).join('');
+  $('fSev').innerHTML = opt('', 'Любая важность', fl.sev) + ['critical', 'major', 'minor'].map(s => opt(s, SEVERITY[s], fl.sev)).join('');
+  if (fl.platform && !plats.includes(fl.platform === '—' ? '' : fl.platform)) fl.platform = '';
+  if (fl.lang && !langs.includes(fl.lang)) fl.lang = '';
+  $('fPlatform').innerHTML = opt('', 'Все платформы', fl.platform) + plats.map(p => opt(p || '—', p || 'Без платформы', fl.platform)).join('');
+  $('fLang').innerHTML = opt('', 'Все языки', fl.lang) + langs.map(l => opt(l, getLang(l).name, fl.lang)).join('');
+  renderTable();
+}
+
+function filtered() {
+  const fl = state.filter, q = fl.q.trim().toLowerCase();
+  return state.result.findings.filter(f => {
+    if (f.severity === 'info' && !fl.info) return false;
+    if (fl.type && f.check !== fl.type) return false;
+    if (fl.sev && f.severity !== fl.sev) return false;
+    if (fl.lang && f.row.lang !== fl.lang) return false;
+    if (fl.platform && (f.row.platform || '—') !== fl.platform) return false;
+    if (q && !(f.row.key + '\n' + f.row.src + '\n' + f.row.tgt + '\n' + f.message + '\n' + f.type + '\n' + f.row.file).toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+function highlight(text, ranges, cls) {
+  if (!ranges || !ranges.length) return esc(text);
+  const rs = ranges.filter(r => r && r[1] > r[0]).sort((a, b) => a[0] - b[0]);
+  let out = '', pos = 0;
+  for (const [s, e] of rs) {
+    if (s < pos) continue;
+    const frag = text.slice(s, e);
+    out += esc(text.slice(pos, s)) + '<mark class="' + cls + (/^\s+$/.test(frag) ? ' ws' : '') + '">' + esc(frag) + '</mark>';
+    pos = e;
+  }
+  return out + esc(text.slice(pos));
+}
+
+function renderTable() {
+  const fl = state.filter, list = filtered();
+  const pages = Math.max(1, Math.ceil(list.length / fl.size));
+  fl.page = Math.min(fl.page, pages - 1);
+  const slice = list.slice(fl.page * fl.size, (fl.page + 1) * fl.size);
+  $('resBody').innerHTML = slice.length ? slice.map(f => {
+    const r = f.row, L = r.L, bad = f.severity === 'critical' ? 'bad' : '';
+    return `<tr><td class="key">${esc(r.key)}</td>
+      <td class="small">${esc(r.file)}${r.platform ? '<br><span class="tag">' + r.platform + '</span>' : ''}</td>
+      <td class="small">${esc(L.name)}${L.basic ? '' : '<br><span class="tag">' + L.code + '</span>'}</td>
+      <td class="txt" lang="ru">${highlight(r.src, f.hlSrc, '')}</td>
+      <td class="txt" lang="${L.basic ? '' : L.code}" dir="${L.dir}">${highlight(r.tgt, f.hlTgt, bad)}</td>
+      <td class="small"><b>${esc(checkName(f.check))}</b><br>${esc(f.type)}</td>
+      <td><span class="sev ${f.severity}">${SEVERITY[f.severity]}</span></td>
+      <td class="small">${esc(f.message)}</td></tr>`;
+  }).join('') : '<tr><td colspan="8" class="empty">' + (state.result.findings.some(f => f.severity !== 'info') ? 'Под выбранные фильтры ничего не попадает.' : 'Находок нет — автопроверки пройдены.') + '</td></tr>';
+  $('shown').textContent = 'Показано находок: ' + list.length + (list.length > fl.size ? ' (стр. ' + (fl.page + 1) + ' из ' + pages + ')' : '') + '. Экспорт учитывает фильтры.';
+  $('pgInfo').textContent = 'Стр. ' + (fl.page + 1) + ' из ' + pages;
+  $('pgPrev').disabled = fl.page === 0; $('pgNext').disabled = fl.page >= pages - 1;
+}
+
+const bindFilter = (id, key, ev) => $(id).addEventListener(ev || 'change', e => { state.filter[key] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; state.filter.page = 0; renderTable(); });
+bindFilter('fType', 'type'); bindFilter('fSev', 'sev'); bindFilter('fPlatform', 'platform'); bindFilter('fLang', 'lang'); bindFilter('fSearch', 'q', 'input'); bindFilter('fInfo', 'info');
+$('pageSize').onchange = e => { state.filter.size = +e.target.value; state.filter.page = 0; renderTable(); };
+$('pgPrev').onclick = () => { state.filter.page--; renderTable(); };
+$('pgNext').onclick = () => { state.filter.page++; renderTable(); };
+$('btnResetFilters').onclick = () => { Object.assign(state.filter, { type: '', sev: '', platform: '', lang: '', q: '', page: 0 }); $('fSearch').value = ''; renderResults(); };
+$('matrix').addEventListener('click', e => {
+  const td = e.target.closest('td.n'); if (!td) return;
+  Object.assign(state.filter, { type: td.dataset.type, lang: td.dataset.lang, sev: '', platform: '', q: '', page: 0 }); $('fSearch').value = ''; renderResults();
+});
+
+/* ---------- экспорт ---------- */
+function exportRows() {
+  const head = ['Ключ', 'Файл', 'Платформа', 'Язык', 'Исходник', 'Перевод', 'Тип проблемы', 'Подтип', 'Важность', 'Пояснение'];
+  return [head].concat(filtered().map(f => [f.row.key, f.row.file, f.row.platform, f.row.L.name, f.row.src, f.row.tgt, checkName(f.check), f.type, SEVERITY[f.severity], f.message]));
+}
+const stamp = () => new Date().toISOString().slice(0, 10);
+$('btnCsv').onclick = () => {
+  const q = v => /[";\n\r]/.test(v) ? '"' + String(v).replace(/"/g, '""') + '"' : v;
+  download('lqa-desk-' + stamp() + '.csv', '﻿' + exportRows().map(r => r.map(q).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+};
+$('btnXlsx').onclick = () => {
+  if (!window.XLSX) return alert('Библиотека SheetJS не загрузилась — воспользуйтесь экспортом в CSV.');
+  const ws = XLSX.utils.aoa_to_sheet(exportRows());
+  ws['!cols'] = [18, 20, 10, 14, 50, 50, 24, 26, 14, 60].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Находки');
+  XLSX.writeFile(wb, 'lqa-desk-' + stamp() + '.xlsx');
+};
+
+/* ---------- настройки ---------- */
+$('btnSettings').onclick = () => { renderSettings(state.settings); $('dlgSettings').showModal(); };
+function renderSettings(s) {
+  $('setBody').innerHTML = `<label class="f" style="max-width:420px">Не проверять длину, если исходник короче (символов)<input type="number" id="setMinLen" min="0" value="${s.minLen}"></label>
+    <div style="margin:14px 0 6px;font-weight:500">Допустимое отношение длины перевода к исходнику</div>
+    <table class="simple" style="max-width:560px"><thead><tr><th>Язык</th><th>Письменность</th><th>Мин.</th><th>Макс.</th></tr></thead><tbody>` +
+    targetLangs().map(L => { const r = s.ranges[L.code] || L.lengthRatio; return `<tr><td>${esc(L.name)}</td><td class="hint">${esc(L.script)}</td><td><input type="number" step="0.05" min="0" style="width:80px" data-r="${L.code}" data-i="0" value="${r[0]}"></td><td><input type="number" step="0.05" min="0" style="width:80px" data-r="${L.code}" data-i="1" value="${r[1]}"></td></tr>`; }).join('') +
+    '</tbody></table><div class="hint" style="margin-top:8px">Настройки хранятся только в этом браузере. Загруженные строки и глоссарий нигде не сохраняются.</div>';
+}
+$('setCancel').onclick = () => $('dlgSettings').close();
+$('setReset').onclick = () => renderSettings({ minLen: 10, ranges: {} });
+$('setOk').onclick = () => {
+  const ranges = {};
+  for (const L of targetLangs()) {
+    const lo = parseFloat($('setBody').querySelector(`[data-r="${L.code}"][data-i="0"]`).value), hi = parseFloat($('setBody').querySelector(`[data-r="${L.code}"][data-i="1"]`).value);
+    if (!(lo >= 0) || !(hi > lo)) return alert('Проверьте диапазон для языка «' + L.name + '»: минимум должен быть меньше максимума.');
+    if (lo !== L.lengthRatio[0] || hi !== L.lengthRatio[1]) ranges[L.code] = [lo, hi];
+  }
+  state.settings.ranges = ranges; state.settings.minLen = Math.max(0, parseInt($('setMinLen').value, 10) || 0);
+  saveSettings(); $('dlgSettings').close(); scheduleRun();
+};
+
+/* ---------- очистка и пример ---------- */
+$('btnClear').onclick = () => { if (!state.datasets.length && !state.glossary) return; if (confirm('Удалить все загруженные данные и глоссарий?')) { state.datasets = []; state.glossary = null; renderDatasets(); scheduleRun(); } };
+$('btnDemo').onclick = () => {
+  const mk = (name, lang, platform, lines) => addDataset({ name, kind: 'paste', lang, platform, rows: lines.map(l => { const [key, src, tgt] = l.split('|'); return { key, src, tgt: tgt || '' }; }) });
+  mk('Пример · en · Web', 'en', 'Web', [
+    'cart.title|Корзина|Cart', 'order.count|У вас {count} заказов|You have {cnt} orders', 'order.status|Заказ №%1$s доставлен %2$s|Delivered on %2$s: order #%1$s',
+    'order.pos|Заказ %s на сумму %d ₽|%d ₽ for the order %s', 'pay.btn|Оплатить|Оплатить', 'list.empty|Список пуст.|',
+    'delivery.info|Доставка в пункт выдачи бесплатна.|Shipping to the pickup point is  free .', 'promo.text|Скидка действует до конца недели!|The discount is valid until the end of the week',
+    'wallet.open|Откройте WB Кошелёк в приложении|Open the WB Wallet in the app', 'order.sent|Ваш заказ отправлен.|Your order has been shipped.', 'html.bold|Нажмите <b>Оформить</b>, чтобы продолжить|Tap Checkout to continue',
+  ]);
+  mk('Пример · en · Android', 'en', 'Android', ['order_sent|Ваш заказ отправлен.|Your order was sent.', 'cart_title|Корзина|Basket']);
+  mk('Пример · tr · iOS', 'tr', 'iOS', ['order.sent|Ваш заказ отправлен.|Siparişiniz gönderildi.', 'wallet.open|Откройте WB Кошелёк в приложении|Uygulamada WB Cüzdan\'ı açın']);
+  mk('Пример · ka · Web', 'ka', 'Web', ['order.sent|Ваш заказ отправлен.|თქვენი შეკვეთა გაგზავნილია.', 'order.in|Товары в заказе|პროდუქტები შეკვეთაში']);
+  mk('Пример · hy · Web', 'hy', 'Web', ['order.sent|Ваш заказ отправлен.|Ձեր պատվերն ուղարկված է.', 'order.q|Отменить заказ?|Չեղարկե՞լ պատվերը']);
+  mk('Пример · he · Web', 'he', 'Web', ['order.sent|Ваш заказ отправлен.|ההזמנה שלך נשלחה.', 'order.num|Заказ №%1$s оформлен|הזמנה מס\' s$1% בוצעה']);
+  mk('Пример · zh · Web', 'zh', 'Web', ['order.sent|Ваш заказ отправлен.|您的订单已发货.', 'order.q|Отменить заказ?|取消订单？']);
+  setGlossary({ name: 'Пример глоссария', langs: ['en', 'tr', 'ka', 'hy', 'he', 'zh'], terms: [
+    { ru: 'заказ', forms: [], dnt: false, tr: { en: ['order'], tr: ['sipariş'], ka: ['შეკვეთა'], hy: ['պատվեր'], he: ['הזמנה'], zh: ['订单'] } },
+    { ru: 'доставка', forms: [], dnt: false, tr: { en: ['delivery'] } },
+    { ru: 'пункт выдачи', forms: [], dnt: false, tr: { en: ['pickup point'] } },
+    { ru: 'корзина', forms: ['basket'], dnt: false, tr: { en: ['cart'] } },
+    { ru: 'WB Кошелёк', forms: [], dnt: true, tr: { en: ['WB Wallet'], tr: ['WB Cüzdan'] } },
+  ] });
+};
+
+renderToggles(); renderDatasets();
+</script>
+</body>
+</html>
