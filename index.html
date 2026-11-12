@@ -642,7 +642,8 @@ function matchPhrase(words, toks, L) {
    4. ПЛЕЙСХОЛДЕРЫ
    ===================================================================== */
 // 1 {{name}}  2 {name}/{0}/{}  3 %%  4 printf (5 — номер)  6 HTML-тег  7 литерал \n  8 реальный перевод строки
-const PH_SRC = String.raw`(\{\{\s*[\w.\-]+\s*\}\})|(\{[\w.\-]*\})|(%%)|(%(?:(\d+)\$)?[-+0#]*\d*(?:\.\d+)?(?:hh|h|ll|l|L|z|j|t)?[sdiufFeEgGxXoc@])|(<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>)|(\\[ntr])|(\n)`;
+// Флаги printf (-, +, 0, #) допустимы только вместе с шириной (%-5d): иначе «50%-dən», «50%-li» принимались бы за переменные.
+const PH_SRC = String.raw`(\{\{\s*[\w.\-]+\s*\}\})|(\{[\w.\-]*\})|(%%)|(%(?:(\d+)\$)?(?:[-+0#]+\d+|\d*)(?:\.\d+)?(?:hh|h|ll|l|L|z|j|t)?[sdiufFeEgGxXoc@])|(<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>)|(\\[ntr])|(\n)`;
 const VOID_TAGS = new Set(['br', 'hr', 'img', 'input', 'wbr', 'meta', 'link']);
 
 function extractPlaceholders(text) {
@@ -652,7 +653,7 @@ function extractPlaceholders(text) {
     if (m[1]) { t.kind = 'var'; t.norm = m[1].replace(/\s+/g, ''); }
     else if (m[2]) { t.kind = 'var'; t.norm = m[2]; t.positional = m[2] === '{}'; }
     else if (m[3]) continue;
-    else if (m[4]) { t.kind = 'var'; t.norm = m[4]; t.positional = !m[5]; }
+    else if (m[4]) { t.kind = 'var'; t.norm = m[4]; t.positional = !m[5]; t.printf = true; }
     else if (m[6]) { const mm = /^<(\/?)([A-Za-z][A-Za-z0-9-]*)/.exec(m[6]); t.kind = 'tag'; t.name = mm[2].toLowerCase(); t.close = !!mm[1]; t.norm = '<' + mm[1] + t.name + '>'; }
     else if (m[7]) { t.kind = 'nl'; t.norm = m[7]; }
     else { t.kind = 'nl'; t.norm = '\\n'; }
@@ -710,8 +711,15 @@ const CHECKS = [
   { id: 'placeholders', name: 'Переменные и плейсхолдеры', hint: '{{name}}, {name}, %s, %d, %1$s, HTML-теги, \\n: потерянные, лишние, изменённый порядок', scope: 'row',
     run(row) {
       if (!row.tgt.trim()) return [];
-      const a = extractPlaceholders(row.src), b = extractPlaceholders(row.tgt), out = [];
+      const a = extractPlaceholders(row.src), out = [];
+      let b = extractPlaceholders(row.tgt);
       if (!a.length && !b.length) return out;
+      // Знак процента с приросшим суффиксом («50%dən», «100%lik», «5%i») — это не переменная:
+      // если такой «переменной» нет в исходнике, а в исходнике есть обычный знак %, не считаем её.
+      if (maskPlaceholders(row.src).includes('%')) {
+        const inSrc = new Set(a.map(t => t.norm));
+        b = b.filter(t => !(t.printf && t.positional && !inSrc.has(t.norm) && (/\d/.test(row.tgt[t.s - 1] || '') || /\p{L}/u.test(row.tgt[t.e] || ''))));
+      }
       const count = arr => { const m = new Map(); for (const t of arr) m.set(t.norm, (m.get(t.norm) || 0) + 1); return m; };
       const ca = count(a), cb = count(b);
       const sevOf = t => t.kind === 'var' ? 'critical' : t.kind === 'tag' ? 'major' : 'minor';
