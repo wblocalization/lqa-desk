@@ -1155,7 +1155,7 @@ function renderDatasets() {
       <td style="text-align:right">${d.kind === 'po' ? '<button class="btn small" data-act="po" title="Только записи с находками, с пометками fuzzy и #. QA">.po: только проблемные</button> ' : ''}<button class="btn small" data-act="del">Удалить</button></td></tr>`).join('') + '</tbody></table>';
   const g = state.glossary;
   $('glossInfo').innerHTML = g
-    ? `<span><b>Глоссарий:</b> ${esc(g.name)} — терминов: ${g.terms.length}, из них «не переводится»: ${g.terms.filter(t => t.dnt).length}; языки: ${g.langs.map(c => esc(getLang(c).name)).join(', ') || '—'}</span><span class="spacer"></span><button class="btn small" id="glossDel">Убрать глоссарий</button>`
+    ? `<span><b>Глоссарий:</b> ${esc(g.name)} — терминов: ${g.terms.length}, из них «не переводится»: ${g.terms.filter(t => t.dnt).length}; языки: ${g.langs.map(c => esc(getLang(c).name)).join(', ') || '—'}${g.saved ? ' <span class="tag" title="Глоссарий хранится в этом браузере и подгружается сам при следующем открытии">сохранён в браузере' + (g.savedAt ? ' · ' + esc(g.savedAt) : '') + '</span>' : ''}</span><span class="spacer"></span><button class="btn small" id="glossDel">Убрать глоссарий</button>`
     : '<span class="hint">Глоссарий не загружен — проверка терминов пропускается. Загрузите его на вкладке «Глоссарий».</span>';
   $('btnPoAll').hidden = !state.datasets.some(d => d.kind === 'po');
 }
@@ -1171,7 +1171,7 @@ $('datasets').addEventListener('click', e => {
   if (act === 'del') { state.datasets = state.datasets.filter(x => x !== d); renderDatasets(); scheduleRun(); }
   if (act === 'po') downloadPO([d]);
 });
-$('glossInfo').addEventListener('click', e => { if (e.target.id === 'glossDel') { state.glossary = null; renderDatasets(); scheduleRun(); } });
+$('glossInfo').addEventListener('click', e => { if (e.target.id === 'glossDel' && (!state.glossary.saved || confirm('Убрать глоссарий? Он удалится и из памяти браузера — потом его нужно будет загрузить заново.'))) { if (state.glossary.saved) forgetGlossary(); state.glossary = null; renderDatasets(); scheduleRun(); } });
 
 /* ---------- вкладки ---------- */
 $('tabs').addEventListener('click', e => {
@@ -1347,7 +1347,30 @@ $('mapOk').onclick = () => {
   }
   $('dlgMap').close(); nextSheet();
 };
-function setGlossary(g) { state.glossary = g; buildGlossaryIndex(g); renderDatasets(); scheduleRun(); }
+/* Глоссарий сохраняется в памяти браузера (localStorage) и при следующем открытии подгружается сам.
+   Хранится только на этом компьютере и в этом браузере, никуда не отправляется. */
+const GLOSS_KEY = 'lqaDesk.glossary';
+function forgetGlossary() { try { localStorage.removeItem(GLOSS_KEY); } catch (e) {} }
+function setGlossary(g, persist = true) {
+  if (persist) {
+    g.savedAt = new Date().toLocaleDateString('ru-RU');
+    try {
+      localStorage.setItem(GLOSS_KEY, JSON.stringify({ name: g.name, langs: g.langs, savedAt: g.savedAt,
+        terms: g.terms.map(t => ({ ru: t.ru, ruAlts: t.ruAlts, tr: t.tr, forms: t.forms, dnt: t.dnt })) }));
+      g.saved = true;
+    } catch (e) { g.saved = false; alert('Глоссарий загружен, но сохранить его в браузере не удалось (нет места или хранилище отключено). После закрытия вкладки его нужно будет загрузить снова.'); }
+  }
+  state.glossary = g; buildGlossaryIndex(g); renderDatasets(); scheduleRun();
+}
+function restoreGlossary() {
+  try {
+    const g = JSON.parse(localStorage.getItem(GLOSS_KEY) || 'null');
+    if (!g || !Array.isArray(g.terms) || !g.terms.length) return;
+    for (const t of g.terms) { t.tr = t.tr || {}; t.forms = t.forms || []; t.dnt = !!t.dnt; }
+    g.langs = g.langs || []; g.saved = true;
+    state.glossary = g; buildGlossaryIndex(g);
+  } catch (e) {}
+}
 
 /* ---------- переключатели проверок ---------- */
 function renderToggles() {
@@ -1535,7 +1558,7 @@ function renderSettings(s) {
     <div style="margin:14px 0 6px;font-weight:500">Допустимое отношение длины перевода к исходнику</div>
     <table class="simple" style="max-width:560px"><thead><tr><th>Язык</th><th>Письменность</th><th>Мин.</th><th>Макс.</th></tr></thead><tbody>` +
     targetLangs().map(L => { const r = s.ranges[L.code] || L.lengthRatio; return `<tr><td>${esc(L.name)}</td><td class="hint">${esc(L.script)}</td><td><input type="number" step="0.05" min="0" style="width:80px" data-r="${L.code}" data-i="0" value="${r[0]}"></td><td><input type="number" step="0.05" min="0" style="width:80px" data-r="${L.code}" data-i="1" value="${r[1]}"></td></tr>`; }).join('') +
-    '</tbody></table><div class="hint" style="margin-top:8px">Настройки хранятся только в этом браузере. Загруженные строки и глоссарий нигде не сохраняются.</div>';
+    '</tbody></table><div class="hint" style="margin-top:8px">Настройки и глоссарий хранятся только в этом браузере. Загруженные строки переводов нигде не сохраняются.</div>';
 }
 $('setCancel').onclick = () => $('dlgSettings').close();
 $('setReset').onclick = () => renderSettings({ minLen: 10, ranges: {} });
@@ -1551,7 +1574,7 @@ $('setOk').onclick = () => {
 };
 
 /* ---------- очистка и пример ---------- */
-$('btnClear').onclick = () => { if (!state.datasets.length && !state.glossary) return; if (confirm('Удалить все загруженные данные и глоссарий?')) { state.datasets = []; state.glossary = null; renderDatasets(); scheduleRun(); } };
+$('btnClear').onclick = () => { if (!state.datasets.length && !state.glossary) return; if (confirm('Удалить все загруженные данные и глоссарий (в том числе сохранённый в браузере)?')) { state.datasets = []; state.glossary = null; forgetGlossary(); renderDatasets(); scheduleRun(); } };
 $('btnDemo').onclick = () => {
   const mk = (name, lang, lines) => addDataset({ name, kind: 'paste', lang, rows: lines.map(l => { const [key, src, tgt] = l.split('|'); return { key, src, tgt: tgt || '' }; }) });
   mk('Пример · en · Web', 'en', [
@@ -1572,9 +1595,10 @@ $('btnDemo').onclick = () => {
     { ru: 'пункт выдачи', forms: [], dnt: false, tr: { en: ['pickup point'] } },
     { ru: 'корзина', forms: ['basket'], dnt: false, tr: { en: ['cart'] } },
     { ru: 'WB Кошелёк', forms: [], dnt: true, tr: { en: ['WB Wallet'], tr: ['WB Cüzdan'] } },
-  ] });
+  ] }, false);
 };
 
+restoreGlossary();
 renderToggles(); renderDatasets();
 </script>
 </body>
