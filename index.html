@@ -1047,7 +1047,8 @@ function detectLang(name) {
 }
 /* ---------- .po ---------- */
 function poUnquote(s) {
-  return s.slice(1, -1).replace(/\\(.)/g, (m, c) => c === 'n' ? '\n' : c === 't' ? '\t' : c === 'r' ? '\r' : c);
+  const end = s.lastIndexOf('"');                    // всё после закрывающей кавычки отбрасываем
+  return s.slice(1, end > 0 ? end : s.length).replace(/\\(.)/g, (m, c) => c === 'n' ? '\n' : c === 't' ? '\t' : c === 'r' ? '\r' : c);
 }
 function parsePO(text) {
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
@@ -1063,7 +1064,8 @@ function parsePO(text) {
       if (t.startsWith('#:')) cur.refs.push(t.slice(2).trim());
       cur.lines.push(line); field = null; continue;
     }
-    const m = /^(msgctxt|msgid_plural|msgid|msgstr)(?:\[(\d+)\])?\s*(".*")$/.exec(t);
+    // флаг s: внутри строки могут быть «невидимые» разделители строк U+2028/U+2029 (их вставляют CAT-системы) — точка их иначе не берёт
+    const m = /^(msgctxt|msgid_plural|msgid|msgstr)(?:\[(\d+)\])?\s*(".*)$/s.exec(t);
     if (m) {
       if ((m[1] === 'msgid' || m[1] === 'msgctxt') && (cur.msgid !== null || (m[1] === 'msgctxt' && cur.msgctxt !== null))) start();
       const v = poUnquote(m[3]);
