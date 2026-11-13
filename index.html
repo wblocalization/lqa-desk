@@ -318,7 +318,7 @@ const LANGUAGES = {
     aliases: ['ru', 'rus', 'russian'],
     punct: P(),
     suffixes: ['иями', 'ями', 'ами', 'иях', 'иям', 'ией', 'ием', 'ого', 'его', 'ому', 'ему', 'ыми', 'ими', 'ою', 'ею', 'ов', 'ев', 'ей', 'ой', 'ий', 'ый', 'ая', 'яя', 'ое', 'ее', 'ые', 'ие', 'ом', 'ем', 'ам', 'ям', 'ах', 'ях', 'ых', 'их', 'ую', 'юю', 'ым', 'им', 'ью', 'ия', 'ию', 'ии', 'а', 'я', 'ы', 'и', 'у', 'ю', 'е', 'о', 'ь', 'й'],
-    prefixes: [], charMap: { 'ё': 'е' }, fleeting: { vowels: 'ое', last: 'кц' },
+    prefixes: [], charMap: { 'ё': 'е' }, fleeting: { vowels: 'ое', last: 'кц', softAfter: 'л' },   // подарок → подарка, кошелёк → кошелька
     spaces: true, lengthRatio: [0.7, 1.6] },
 
   en: { code: 'en', name: 'Английский', script: 'Латиница', dir: 'ltr', locale: 'en',
@@ -554,7 +554,7 @@ function prepTermWord(w, L) {
     }
     for (const d of L._drop) if (b.endsWith(d) && b.length - d.length >= min) add(b.slice(0, -d.length));
     if (L.fleeting && b.length > 3 && L.fleeting.vowels.includes(b[b.length - 2]) && L.fleeting.last.includes(b[b.length - 1]))
-      add(b.slice(0, -2) + b[b.length - 1]);
+      { add(b.slice(0, -2) + b[b.length - 1]); if ((L.fleeting.softAfter || '').includes(b[b.length - 3])) add(b.slice(0, -2) + 'ь' + b[b.length - 1]); }
   }
   if (L.alternations) for (const s of [...stems]) {
     for (const [from, to] of Object.entries(L.alternations)) if (s.endsWith(from)) add(s.slice(0, -from.length) + to);
@@ -873,14 +873,14 @@ function buildGlossaryIndex(gloss) {
       const pat = { term, words, need };
       for (const k of new Set((need === 3 ? [words[0].w] : words[0].stems).map(s => s.slice(0, 2)))) put(k, pat);
     };
-    mk(term.ru, 2);
+    for (const a of term.ruAlts || [term.ru]) mk(a, 2);   // «ПВЗ / пункт выдачи» — срабатывает любой вариант
     for (const f of term.forms) mk(f, 3);        // допустимые формы засчитываются и в исходнике
   }
   gloss.index = index;
 }
 
 function evalDNT(term, row, L) {
-  const names = (term.tr[L.code] && term.tr[L.code].length ? term.tr[L.code] : [term.ru]);
+  const names = (term.tr[L.code] && term.tr[L.code].length ? term.tr[L.code] : (term.ruAlts || [term.ru]));
   const t = row.tgt.replace(APOS_RE, "'");
   let manual = null;
   for (const name of names) {
@@ -1232,7 +1232,8 @@ async function nextSheet() {
   try {
     const sheets = (await readTableFile(file)).filter(s => s.rows.length);
     if (!sheets.length) throw new Error('файл пуст');
-    mapCtx = { file, mode, sheets, sheet: 0, header: true };
+    mapCtx = { file, mode, sheets, sheet: 0, header: true, sels: {}, append: false,
+      use: sheets.map(sh => !/удал|неактуал|архив|устар|deleted|archive|obsolete/i.test(sh.name)) };
     renderMap(true); $('dlgMap').showModal();
   } catch (err) { alert('Не удалось прочитать ' + file.name + ': ' + err.message); nextSheet(); }
 }
@@ -1244,6 +1245,9 @@ function renderMap(guess) {
   $('mapTitle').textContent = (c.mode === 'gloss' ? 'Глоссарий: ' : 'Колонки: ') + c.file.name;
   let html = '<div class="grid">';
   if (c.sheets.length > 1) html += `<label class="f">Лист<select id="mSheet">${c.sheets.map((s, i) => `<option value="${i}"${i === c.sheet ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>`;
+  if (c.mode === 'gloss' && c.sheets.length > 1) html = '<div style="font-weight:500;margin-bottom:6px">Листы, из которых брать термины</div><div class="row" style="margin-bottom:6px">' +
+    c.sheets.map((sh, i) => `<label class="chk"><input type="checkbox" data-use="${i}"${c.use[i] ? ' checked' : ''}>${esc(cut(sh.name, 40))}</label>`).join('') +
+    '</div><div class="hint" style="margin-bottom:12px">Термины со всех отмеченных листов объединяются в один глоссарий. Ниже — колонки листа, выбранного в поле «Лист»; у остальных листов они определены автоматически, их можно проверить, переключив лист.</div>' + html.replace('>Лист<', '>Лист (показать колонки)<');
   html += `<label class="f">Заголовки<select id="mHeader"><option value="1"${c.header ? ' selected' : ''}>Первая строка — заголовки</option><option value="0"${c.header ? '' : ' selected'}>Заголовков нет</option></select></label>`;
   if (c.mode === 'data') {
     if (guess) {
@@ -1259,23 +1263,55 @@ function renderMap(guess) {
     html += colSel('mKey', 'Ключ', c.sel.k, true) + colSel('mSrc', 'Исходник (русский)', c.sel.s) + colSel('mTgt', 'Перевод', c.sel.t)
       + `<label class="f">Язык перевода<select id="mLang">${langOptions(c.sel.lang)}</select></label></div>`;
   } else {
-    if (guess) {
-      let ru = find(/^(ru|rus)$|русск|термин|исходн|source|^term/i); if (ru < 0) ru = 0;
-      const forms = find(/допустим|формы|forms|variants/i), dnt = find(/не\s*перевод|dnt|do not translate|untranslat/i);
-      c.sel = { ru, forms, dnt, langs: head.map((h, i) => (i === ru || i === forms || i === dnt) ? '' : (detectLang(h) === SOURCE_LANG ? '' : detectLang(h))) };
-    }
-    html += colSel('mRu', 'Термин на русском', c.sel.ru) + colSel('mForms', '«Допустимые формы»', c.sel.forms, true) + colSel('mDnt', '«Не переводится»', c.sel.dnt, true) + '</div>';
+    c.sels[c.sheet] = c.sels[c.sheet] || guessGloss(c, c.sheet);
+    c.sel = c.sels[c.sheet];
+    html += colSel('mRu', 'Термин на русском', c.sel.ru) + colSel('mForms', '«Допустимые формы»', c.sel.forms, true) + colSel('mDnt', '«Не переводится»', c.sel.dnt, true);
+    if (state.glossary) html += '<label class="f">Уже загруженный глоссарий<select id="mAppend"><option value="0">Заменить</option><option value="1">Дополнить этим файлом</option></select></label>';
+    html += '</div>';
     html += '<div style="margin-top:12px;font-weight:500">Колонки с переводами терминов</div><div class="grid" style="margin-top:6px">' +
-      head.map((h, i) => `<label class="f">${String.fromCharCode(65 + i % 26)}: ${esc(cut(h, 28))}<select data-lcol="${i}"><option value="">— не использовать —</option>${targetLangs().map(l => `<option value="${l.code}"${c.sel.langs[i] === l.code ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>`).join('') + '</div>';
+      head.map((h, i) => (i === c.sel.ru || !rows.slice(0, 60).some(r => (r[i] || '').trim())) ? '' : `<label class="f">${String.fromCharCode(65 + i % 26)}: ${esc(cut(h, 28))}<select data-lcol="${i}"><option value="">— не использовать —</option>${targetLangs().map(l => `<option value="${l.code}"${c.sel.langs[i] === l.code ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>`).join('') + '</div>';
   }
   html += '<div class="preview"><table><thead><tr>' + head.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' +
     rows.slice(c.header ? 1 : 0, (c.header ? 1 : 0) + 5).map(r => '<tr>' + head.map((_, i) => '<td>' + esc(r[i] || '') + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
   html += `<div class="hint" style="margin-top:6px">Строк в листе: ${rows.length - (c.header ? 1 : 0)}</div>`;
   $('mapBody').innerHTML = html;
 }
+/* Автоопределение колонок глоссария на листе. Язык берётся из заголовка колонки (EN, KA, «Армянский»…),
+   а если лист целиком про один язык («Азербайджанский глосс») — из названия листа. */
+function guessGloss(c, si) {
+  const rows = c.sheets[si].rows, ncol = Math.max(...rows.slice(0, 200).map(r => r.length));
+  const head = Array.from({ length: ncol }, (_, i) => c.header ? (rows[0][i] || '').trim() : '');
+  const find = re => head.findIndex(h => re.test(h));
+  let ru = find(/^(ru|rus)$|русск|термин|исходн|source|^term/i); if (ru < 0) ru = 0;
+  const forms = find(/допустим|формы|forms|variants/i), dnt = find(/не\s*перевод|dnt|do not translate|untranslat/i);
+  const langs = head.map((h, i) => (i === ru || i === forms || i === dnt || detectLang(h) === SOURCE_LANG) ? '' : detectLang(h));
+  const sl = detectLang(c.sheets[si].name);
+  if (sl && sl !== SOURCE_LANG && !langs.includes(sl)) {
+    const free = head.map((h, i) => i).filter(i => i !== ru && i !== forms && i !== dnt && !langs[i] && !/коммент|comment|пример|example|примеч|note/i.test(head[i]) && rows.slice(1, 40).some(r => (r[i] || '').trim()));
+    const pick = free.find(i => /фин|final|перевод|target|translation/i.test(head[i])) ?? free[free.length - 1];
+    if (pick !== undefined) langs[pick] = sl;
+  }
+  return { ru, forms, dnt, langs };
+}
+function saveGlossSel() {
+  const c = mapCtx, B = $('mapBody'); if (c.mode !== 'gloss' || !$('mRu')) return;
+  const langs = []; for (const el of B.querySelectorAll('[data-lcol]')) langs[+el.dataset.lcol] = el.value;
+  c.sels[c.sheet] = { ru: +$('mRu').value, forms: +$('mForms').value, dnt: +$('mDnt').value, langs };
+  for (const el of B.querySelectorAll('[data-use]')) c.use[+el.dataset.use] = el.checked;
+  if ($('mAppend')) c.append = $('mAppend').value === '1';
+}
+/* Варианты в ячейке: через ; | перенос строки или « / ». Слэш без пробелов делит, только если обе части не короче 2 символов (A/B не трогаем). */
+function splitAlts(cell) {
+  const out = [];
+  for (const part of String(cell || '').split(/[;|\n]|\s+\/\s*|\s*\/\s+/)) {
+    const bits = part.split('/'), ok = bits.every(b => b.trim().length >= 2);
+    for (const b of ok ? bits : [part]) { const t = b.trim(); if (t && !/^[—–-]+$/.test(t) && !out.includes(t)) out.push(t); }
+  }
+  return out;
+}
 $('mapBody').addEventListener('change', e => {
-  if (e.target.id === 'mSheet') { mapCtx.sheet = +e.target.value; renderMap(true); }
-  if (e.target.id === 'mHeader') { mapCtx.header = e.target.value === '1'; renderMap(true); }
+  if (e.target.id === 'mSheet') { saveGlossSel(); mapCtx.sheet = +e.target.value; renderMap(true); }
+  if (e.target.id === 'mHeader') { saveGlossSel(); mapCtx.sels = {}; mapCtx.header = e.target.value === '1'; renderMap(true); }
 });
 $('mapCancel').onclick = () => { $('dlgMap').close(); nextSheet(); };
 $('mapOk').onclick = () => {
@@ -1287,18 +1323,27 @@ $('mapOk').onclick = () => {
     addDataset({ name: c.file.name + (c.sheets.length > 1 ? ' · ' + c.sheets[c.sheet].name : ''), kind: 'sheet', lang: $('mLang').value,
       rows: rows.map((r, i) => ({ key: k >= 0 ? (r[k] || '') : String(i + 1), src: r[s] || '', tgt: r[t] || '' })) });
   } else {
-    const ru = v('mRu'), fc = v('mForms'), dc = v('mDnt');
-    const cols = [...$('mapBody').querySelectorAll('[data-lcol]')].map(el => ({ i: +el.dataset.lcol, code: el.value })).filter(x => x.code && x.i !== ru && x.i !== fc && x.i !== dc);
-    const split = s => String(s || '').split(/[;|\n]/).map(x => x.trim()).filter(Boolean);
-    const terms = [];
-    for (const r of rows) {
-      const name = (r[ru] || '').trim(); if (!name) continue;
-      const term = { ru: name, tr: {}, forms: fc >= 0 ? split(r[fc]) : [], dnt: dc >= 0 && /^(1|да|yes|y|true|x|х|\+|✓|dnt)$/i.test((r[dc] || '').trim()) };
-      for (const col of cols) { const a = split(r[col.i]); if (a.length) term.tr[col.code] = (term.tr[col.code] || []).concat(a); }
-      terms.push(term);
-    }
-    if (!terms.length) return alert('В выбранной колонке нет терминов.');
-    setGlossary({ name: c.file.name, terms, langs: [...new Set(cols.map(x => x.code))] });
+    saveGlossSel();
+    const byRu = new Map();
+    if (c.append && state.glossary) for (const t of state.glossary.terms) byRu.set(t.ru.toLowerCase(), t);
+    c.sheets.forEach((sh, si) => {
+      if (!c.use[si]) return;
+      const sel = c.sels[si] = c.sels[si] || guessGloss(c, si), ru = sel.ru, fc = sel.forms, dc = sel.dnt;
+      const cols = sel.langs.map((code, i) => ({ i, code })).filter(x => x.code && x.i !== ru && x.i !== fc && x.i !== dc);
+      for (const r of sh.rows.slice(c.header ? 1 : 0)) {
+        const name = (r[ru] || '').replace(/\s+/g, ' ').trim(); if (!name || /^[—–-]+$/.test(name)) continue;
+        let term = byRu.get(name.toLowerCase());
+        if (!term) byRu.set(name.toLowerCase(), term = { ru: name, ruAlts: splitAlts(name), tr: {}, forms: [], dnt: false });
+        if (fc >= 0) for (const f of splitAlts(r[fc])) if (!term.forms.includes(f)) term.forms.push(f);
+        if (dc >= 0 && /^(1|да|yes|y|true|x|х|\+|✓|dnt)$/i.test((r[dc] || '').trim())) term.dnt = true;
+        for (const col of cols) for (const a of splitAlts(r[col.i])) { const arr = term.tr[col.code] = term.tr[col.code] || []; if (!arr.includes(a)) arr.push(a); }
+      }
+    });
+    const terms = [...byRu.values()];
+    if (!terms.length) return alert('В отмеченных листах не нашлось терминов.');
+    const langs = [...new Set(terms.flatMap(t => Object.keys(t.tr)))];
+    if (!langs.length && !terms.some(t => t.dnt)) return alert('Не выбрано ни одной колонки с переводами терминов.');
+    setGlossary({ name: (c.append && state.glossary ? state.glossary.name + ' + ' : '') + c.file.name, terms, langs });
   }
   $('dlgMap').close(); nextSheet();
 };
